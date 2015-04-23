@@ -149,7 +149,7 @@ module load transdecoder/2.0.1
 
 TD=/local/genome/packages/transdecoder/2.0.1/TransDecoder.Predict
 
-$TD -t $inputFASTA --retain_pfam_hits PFAM_concatenated.tab \
+\$TD -t $inputFASTA --retain_pfam_hits PFAM_concatenated.tab \
  --retain_blastp_hits BLASTP_concatenated.tab \
  --retain_long_orfs 120
 EOF
