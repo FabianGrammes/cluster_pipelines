@@ -102,45 +102,80 @@ def run_through_sam( sam_filename ):
         almnt_file = HTSeq.SAM_Reader( sam_filename )
     except KeyError:
         raise ValueError, ( "Can't find file %s" % (sam_filename))
-    count_double = collections.Counter()
-    count_single = collections.Counter()
+    count_reads = collections.Counter()
     for bundle in HTSeq.pair_SAM_alignments( almnt_file, bundle=True ):
-        count_double['__total_reads' ] += 1
-        rs = set()
-        if len(bundle) == 2:
-            for r1,r2 in bundle:
-                if r1 is None or r2 is None:
-                    count_double[ '__not_aligned' ] += 1
-                    continue
-                else:
-                    try:
-                        iv_seq1 = ( co.ref_iv for co in r1.cigar if co.type == "M" and co.size > 0 )
-                        iv_seq2 = ( co.ref_iv for co in r2.cigar if co.type == "M" and co.size > 0 )
-                    except AttributeError:
-                        raise ValueError, ( "Someting wrong with read %s" % (r1))
+        if len(bundle) != 0:
+            count_reads['__Total_reads' ] += 1
+            rs = set()
+            # Loop for multimapping reads: Reads that map to more than 3 positions
+            if len(bundle) > 2:
+                 count_reads[ '__Ambigios_read' ] += 1
+                 continue
+            # Loop for Singles: Reads that map to 1 genomic postion 
+            elif len(bundle) == 1:
+                for r1,r2 in bundle:
+                    if r1 is None or r2 is None:
+                        count_reads[ '__Single_hit:Not_aligned' ] += 1
                         continue
-                    for iv in iv_seq1:
-                        for iv2, fs2 in features[ invert_strand(iv) ].steps():
-                            rs = rs.union( fs2 )
-                    for iv in iv_seq2:
-                        for iv2, fs2 in features[ iv ].steps():
-                            rs = rs.union( fs2 )
-            if len(rs) == 0:
-                count_double[ '__no_feature' ] += 1
-            elif len(rs) == 1:
-                count_single[ '_'.join(rs) ] += 1
-            elif len(rs) == 2:
-                count_double[ '-'.join(rs) ] += 1
-            else:
-                count_double[ '__too_many_features' ] += 1
-        elif len(bundle) == 1:
-            count_double[ '__single_hit' ] += 1
-        elif len(bundle) > 2:
-            count_double[ '__ambigous' ] += 1
-    # join the collections
-    com_coll = count_single+count_double
+                    else:
+                        try:
+                            iv_seq1 = ( co.ref_iv for co in r1.cigar if co.type == "M" and co.size > 0 )
+                            iv_seq2 = ( co.ref_iv for co in r2.cigar if co.type == "M" and co.size > 0 )
+                        except AttributeError:
+                            raise ValueError, ( "Single:Someting wrong with read %s" % (r1))
+                            continue
+                        for iv in iv_seq1:
+                            for iv2, fs2 in features[ invert_strand(iv) ].steps():
+                                rs = rs.union( fs2 )
+                        for iv in iv_seq2:
+                            for iv2, fs2 in features[ iv ].steps():
+                                rs = rs.union( fs2 )
+                                # Parsing through the set  
+                if len(rs) == 0:
+                    count_reads[ '__Single_hit:No_feature' ] += 1
+                elif len(rs) == 1:
+                    count_reads[ '__Single_hit:Feature_found' ] += 1
+                elif len(rs) > 1:
+                    count_reads[ '__Single_hit:Ambigous_features' ] += 1
+            # Loop for Doubles: Reads that map to 2 genomic postion 
+            elif len(bundle) == 2:
+                found = []
+                for r1,r2 in bundle:
+                    if r1 is None or r2 is None:
+                        found.append(False)
+                        continue
+                    else:
+                        found.append(True)  
+                        try:
+                            iv_seq1 = ( co.ref_iv for co in r1.cigar if co.type == "M" and co.size > 0 )
+                            iv_seq2 = ( co.ref_iv for co in r2.cigar if co.type == "M" and co.size > 0 )
+                        except AttributeError:
+                            raise ValueError, ( "Double:Someting wrong with read %s" % (r1))
+                            continue
+                        for iv in iv_seq1:
+                            for iv2, fs2 in features[ invert_strand(iv) ].steps():
+                                rs = rs.union( fs2 )
+                        for iv in iv_seq2:
+                            for iv2, fs2 in features[ iv ].steps():
+                                rs = rs.union( fs2 )
+                if all(found) == False:
+                    count_reads[ '__Double_hit:Not_aligned' ] += 1
+                    continue
+                if any(found):
+                    if len(rs) == 0:
+                        count_reads[ '__Double_hit:No_feature' ] += 1
+                    elif len(rs) == 1:
+                        count_reads[ '_'.join(rs) ] += 1
+                        count_reads[ '__Double_hit:Single_feature_found' ] += 1
+                    elif len(rs) == 2:
+                        count_reads[ '_'.join(rs) ] += 1
+                        count_reads[ '__Double_hit:Double_feature_found' ] += 1
+                    elif len(rs) > 2:
+                        count_reads[ '__Double_hit:Ambigous_features' ] += 1
+        else:
+            continue
     # this sorts the collections.counter 
-    com_coll = sorted(com_coll.items(), key=lambda pair: pair[0], reverse=False)
+    com_coll = sorted(count_reads.items(), key=lambda pair: pair[0], reverse=False)
     return( com_coll )
 
 multi_counts = run_through_sam( options.sam_filename )
@@ -153,4 +188,5 @@ for line in multi_counts:
     handle.write("%s\t%d\n" % (line[0], line[1]))
 
 handle.close()
+
 

@@ -1,15 +1,15 @@
 # count_multi.py
 
-Script to count multimapping reads in a name sorted sam/bam file. The scripts currently
-only consideres reads that mapp to 2 positions in the genome. These reads are normally
-labled as anbigous (in the HTSeq script), however here they are counted.
+Python scripts modified from the HTSeq count script. The script is
+intended to work **only** on name sorted `.sam ` files. It maps and
+counts reads that map to exactly 2 different genomic locations. 
 
 
 
 ### Run Example
 In progress..
 ```bash
-$Rscript makeDB3.R merged.gtf TD_concatenated.bed TD_concatenated.pfam BLASTP_concatenated.tab Test.db 
+python count_multi.py -g Salmon_3p6_Chr_051214.gtf -i example.sam -o example_out.count
 ```
 
 
