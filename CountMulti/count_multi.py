@@ -1,6 +1,5 @@
-import sys, optparse, itertools, warnings, traceback, os.path, collections
-
-import HTSeq
+import sys, itertools, warnings, traceback, os.path, collections, HTSeq
+from optparse import OptionParser
 
 # basic idea:
 ## - use the code from HTSeq count
@@ -14,29 +13,45 @@ import HTSeq
 
 ## Maybe just restrict the whole thing to reads mapping to exactly 2 genomic positions
 
+parser = OptionParser()
+parser.add_option("-g", "--gff", dest="gff_filename", type="string",
+                  help="Input GTF/GFF file", metavar="GTF/GFF FILE")
 
-#==============================================================================
-# define input files
-gff_filename = 'Salmon_3p6_Chr_051214.gtf'
-sam_filename = 's10_test2.sam'
-stranded = 'yes'
-feature_type = 'exon'
-id_attribute = 'gene_id'
-quiet = False
+parser.add_option("-i", "--samin", dest="sam_filename", type="string",
+                  help="Input .sam file, name sorted", metavar="SAM FILE")
 
-# Function to referse strand 
-def invert_strand( iv ):
-   iv2 = iv.copy()
-   if iv2.strand == "+":
-      iv2.strand = "-"
-   elif iv2.strand == "-":
-      iv2.strand = "+"
-   else:
-      raise ValueError, "Illegal strand"
-   return iv2
+parser.add_option("-o", "--out", dest="out_filename", type="string",
+                  default = "multi_count.count", metavar = "OUTPUT FILE",
+                  help="Name of the output file")
 
+parser.add_option( "-s", "--stranded", type="choice", dest="stranded",
+                  choices = ( "yes", "no", "reverse" ), default = "yes",
+                  help = "whether the data is from a strand-specific assay." +
+                  "'yes' is default and currently the only possible option.")
+
+parser.add_option( "-t", "--type", type="string", dest="featuretype",
+                  default = "exon",
+                  help = "feature type (3rd column in GFF file) to be used, " +
+                  "all features of other type are ignored (default, suitable for Ensembl " +
+                  "GTF files: exon). Currently 'exon' is the only option" )
+
+parser.add_option( "-a", "--idattr", type="string", dest="idattr",
+                  default = "gene_id",
+                  help = "GFF attribute to be used as feature ID (default, " +
+                  "suitable for Ensembl GTF files: gene_id). Currently 'gene_id' is the only option" )
+
+parser.add_option( "-q", "--quiet", action="store_true", dest="quiet",
+                  help = "suppress progress report" ) # and warnings" )
+
+(options, args) = parser.parse_args()
+
+
+
+quiet = options.quiet
+
+#-------------------------------------------------------------------------------
 # Define the FUN to read the gff/gtf file
-def gff_read( gff_filename, stranded ):
+def gff_read( gff_filename, stranded, id_attribute, feature_type ):
     features = HTSeq.GenomicArrayOfSets( "auto", stranded )
     # read in the gff/gtf file 
     gff = HTSeq.GFF_Reader( gff_filename )   
@@ -52,23 +67,27 @@ def gff_read( gff_filename, stranded ):
                     raise ValueError, ( "Feature %s at %s does not have strand information but you are " "running htseq-count in stranded mode. Use '--stranded=no'." % ( f.name, f.iv ) )
                 features[ f.iv ] += feature_id
             i += 1
-            if i % 100000 == 0 and not quiet:
+            if i % 300000 == 0 and not quiet:
                 sys.stderr.write( "%d GFF lines processed.\n" % i )
     except KeyError:
         raise ValueError, ( "Something's fishy with the file")
     return( features )
 
 # READ the GTF/GFF file
-features = gff_read( gff_filename, stranded )
+features = gff_read( options.gff_filename, options.stranded, options.idattr, options.featuretype )
 
-# quick check if names are there
-for iv, val in features[ HTSeq.GenomicInterval( "ssa01", 21874065,  21874200, '+')].steps():
-    print iv, val
+#-------------------------------------------------------------------------------
+# Function to referse strand used in the run_through_sam function
+def invert_strand( iv ):
+   iv2 = iv.copy()
+   if iv2.strand == "+":
+      iv2.strand = "-"
+   elif iv2.strand == "-":
+      iv2.strand = "+"
+   else:
+      raise ValueError, "Illegal strand"
+   return iv2
 
-for iv, val in features[ invert_strand(HTSeq.GenomicInterval( "ssa01", 21874065,  21874200, '+'))].steps():
-    print iv, val
-
-# INPROGRESS:
 '''
 Function to read a NAME SORTED SAM file line by line.
 For reads that map to 2 places in the genome it reports these places, more
@@ -86,6 +105,7 @@ def run_through_sam( sam_filename ):
     count_double = collections.Counter()
     count_single = collections.Counter()
     for bundle in HTSeq.pair_SAM_alignments( almnt_file, bundle=True ):
+        count_double['__total_reads' ] += 1
         rs = set()
         if len(bundle) == 2:
             for r1,r2 in bundle:
@@ -123,6 +143,14 @@ def run_through_sam( sam_filename ):
     com_coll = sorted(com_coll.items(), key=lambda pair: pair[0], reverse=False)
     return( com_coll )
 
-cd = run_through_sam( 'test3.sam' )
-for i in cd:
-    print i
+multi_counts = run_through_sam( options.sam_filename )
+
+#-------------------------------------------------------------------------------
+# Write the results to file
+
+handle = open(options.out_filename, 'w')
+for line in multi_counts:
+    handle.write("%s\t%d\n" % (line[0], line[1]))
+
+handle.close()
+
