@@ -13,6 +13,13 @@ python count_multi.py -g Salmon_3p6_Chr_051214.gtf -i example.sam -o example_out
 ```
 
 
+The counts actually add up; however it's imoprtant to keep in mind
+that :
+* `__Single_hit:Not_aligned` does NOT count to the to `__Total_reads`
+* `__Double_hit:Not_aligned` does count to the to `__Total_reads`
+
+
+
 ### HELP
 
 _Input:_

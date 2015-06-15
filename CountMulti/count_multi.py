@@ -17,9 +17,6 @@ parser = OptionParser()
 parser.add_option("-g", "--gff", dest="gff_filename", type="string",
                   help="Input GTF/GFF file", metavar="GTF/GFF FILE")
 
-parser.add_option("-i", "--samin", dest="sam_filename", type="string",
-                  help="Input .sam file, name sorted", metavar="SAM FILE")
-
 parser.add_option("-o", "--out", dest="out_filename", type="string",
                   default = "multi_count.count", metavar = "OUTPUT FILE",
                   help="Name of the output file")
@@ -45,7 +42,10 @@ parser.add_option( "-q", "--quiet", action="store_true", dest="quiet",
 
 (options, args) = parser.parse_args()
 
-
+if len( args ) != 1:
+    sys.stderr.write( sys.argv[0] + ": Error: Please provide the input .sam.\n" )
+    sys.stderr.write( "  Call with '-h' to get usage information.\n" )
+    sys.exit( 1 )
 
 quiet = options.quiet
 
@@ -67,7 +67,7 @@ def gff_read( gff_filename, stranded, id_attribute, feature_type ):
                     raise ValueError, ( "Feature %s at %s does not have strand information but you are " "running htseq-count in stranded mode. Use '--stranded=no'." % ( f.name, f.iv ) )
                 features[ f.iv ] += feature_id
             i += 1
-            if i % 300000 == 0 and not quiet:
+            if i % 200000 == 0 and not quiet:
                 sys.stderr.write( "%d GFF lines processed.\n" % i )
     except KeyError:
         raise ValueError, ( "Something's fishy with the file")
@@ -103,9 +103,12 @@ def run_through_sam( sam_filename ):
     except KeyError:
         raise ValueError, ( "Can't find file %s" % (sam_filename))
     count_reads = collections.Counter()
+    i = 0
     for bundle in HTSeq.pair_SAM_alignments( almnt_file, bundle=True ):
         if len(bundle) != 0:
-            count_reads['__Total_reads' ] += 1
+            i += 1
+            if i > 0 and i % 200000 == 0 and not quiet:
+                sys.stderr.write( "%d SAM alignment records processed.\n" % ( i ) )
             rs = set()
             # Loop for multimapping reads: Reads that map to more than 3 positions
             if len(bundle) > 2:
@@ -174,11 +177,12 @@ def run_through_sam( sam_filename ):
                         count_reads[ '__Double_hit:Ambigous_features' ] += 1
         else:
             continue
-    # this sorts the collections.counter 
+    # this sorts the collections.counter
+    count_reads['__Total_reads' ] = i
     com_coll = sorted(count_reads.items(), key=lambda pair: pair[0], reverse=False)
     return( com_coll )
 
-multi_counts = run_through_sam( options.sam_filename )
+multi_counts = run_through_sam( args[0] )
 
 #-------------------------------------------------------------------------------
 # Write the results to file
@@ -188,5 +192,3 @@ for line in multi_counts:
     handle.write("%s\t%d\n" % (line[0], line[1]))
 
 handle.close()
-
-
