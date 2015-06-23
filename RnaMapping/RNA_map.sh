@@ -45,6 +45,10 @@ case $key in
     GTF="$2"
     shift # past argument
     ;;
+    -r|--read)
+    READ="$2"
+    shift # past argument
+    ;;
 esac
 shift # past argument or value
 done
@@ -208,6 +212,15 @@ then
 CORES=30
 fi
 
+# Which STAR command to use
+if [ -z "$READ" ] 
+then 
+   STAR=STAR
+else 
+   STAR=STARlong
+fi
+
+
 cat > bash/sbatch-star.sh << EOF
 #!/bin/bash
 #SBATCH --job-name=STAR
@@ -220,7 +233,7 @@ module load star
 module list
 date
 
-for ((TASK=1; TASK<=$END; n++))
+for TASK in {1..$END}
 do
 
 filebase=\$(awk ' NR=='\$TASK' { print \$5 ; }' $MASTER)
@@ -230,7 +243,7 @@ R2='fastq_trim_pe/'\$filebase'_L001_R2_001.trim.fastq.gz'
 
 OUT=star/\$filebase
 
-STAR --limitGenomeGenerateRAM 62000000000 \
+$STAR --limitGenomeGenerateRAM 62000000000 \
 --genomeDir $GENOME \
 --readFilesCommand zcat \
 --readFilesIn \$R1 \$R2 \
@@ -240,7 +253,7 @@ STAR --limitGenomeGenerateRAM 62000000000 \
 --runThreadN $CORES \
 --readMatesLengthsIn NotEqual 
 
-echo "FILE --> " $out " PROCESSED"
+echo "FILE --> " \$OUT " PROCESSED"
  
 done
 
