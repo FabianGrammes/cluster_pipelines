@@ -52,11 +52,11 @@ done
 
 # Default set to Genome: 
 if [ -z "$GENOME" ] 
-then GENOME=/mnt/backup2/users/aquagenome/Ssa/Synteny/CIGENE-3.6-unmasked/STAR/reference/cigene3.6v2-unmasked
+then GENOME=/mnt/users/fabig/RNAseq/Ssa_genome/CIG_3.6v2_chrom-NCBI/STAR_index
 fi
 # Default set to GTF: 
 if [ -z "$GTF" ] 
-then GTF=/mnt/users/fabig/Ssa_transcriptome/cigene3.6_chrom/gtf/Salmon_3p6_Chr_051214.gtf
+then GTF=/mnt/users/fabig/RNAseq/Ssa_genome/CIG_3.6v2_chrom-NCBI/GTF/Salmon_3p6_Chr_NCBI_230415.gtf
 fi
 
 # echo all input variables
@@ -69,7 +69,7 @@ echo $GTF
 echo '--------------------------------------------------------------------------'
 
 # Create the folder tree if it does not exist
-mkdir -p {slurm,bash,fastq_trim,qc,star,count}
+mkdir -p {slurm,bash,fastq_trim,fastq_trim_pe,qc,star,count}
 
 
 # Parse the Illumina sample sheet
@@ -77,6 +77,7 @@ python /mnt/users/fabig/cluster_pipelines/RnaMapping/helper_scripts/SampleSheetP
 
 
 END=$(cat $MASTER | wc -l)
+
 #-------------------------------------------------------------------------------
 #-------------------------------------------------------------------------------
 # PART 1: Quality trim the reads (ARRAY JOB)
@@ -158,11 +159,51 @@ QcJob=$($command | awk ' { print $4 }')
 echo '2) Trimmed sequneces submitted for quality control'
 
 #-------------------------------------------------------------------------------
-# PART 3: STAR (LOOP)
+# PART 3: Remove reads where one of the pairs is too short
+
+cat > bash/sbatch-pairs.sh << EOF
+#!/bin/sh
+#SBATCH --ntasks=1
+#SBATCH --job-name=paired
+#SBATCH --array=1-$END
+#SBATCH --output=slurm/trimPE-%A_%a.out
+  
+module load anaconda
+module list
+date
+  
+script=/mnt/users/fabig/cluster_pipelines/RnaMapping/helper_scripts/fastqPE.py
+  
+filebase=\$(awk ' NR=='\$SLURM_ARRAY_TASK_ID' { print \$5 ; }' $MASTER)
+
+R1='fastq_trim/'\$filebase'_L001_R1_001.trim.fastq.gz'
+R2='fastq_trim/'\$filebase'_L001_R2_001.trim.fastq.gz'
+  
+python $script --f1 \$R1 --f2 \$R2 --c 40 --p fastq_trim_pe
+
+EOF
+command="sbatch --dependency=afterok:$TrimJobArray bash/sbatch-pairs.sh" # Double quotes are essential!
+PairJob=$($command | awk ' { print $4 }')
+for i in $(seq 1 $END)
+do 
+    job=$PairJob'_'$i
+    if [ -z $PairJobArray ] 
+    then 
+	PairJobArray=$job
+    else 
+	PairJobArray=$PairJobArray':'$job
+    fi
+done
+echo $PairJobArray
+
+echo '3) Trimmed sequneces submitted removing too short reads'
+
+#-------------------------------------------------------------------------------
+# PART 4: STAR (LOOP)
 
 # Calculation: how many cores to use for STAR
-CORES=\$(($END * 3))
-if [ \$CORES -gt 30 ]
+CORES=$(($END * 3))
+if [ $CORES -gt 30 ]
 then 
 CORES=30
 fi
@@ -172,24 +213,24 @@ cat > bash/sbatch-star.sh << EOF
 #SBATCH --job-name=STAR
 #SBATCH -n $CORES
 #SBATCH -N 1
-#SBATCH --output=SLURM/slurm-star-%j.out
+#SBATCH --output=slurm/star-%j.out
     
 
 module load star
 module list
 date
 
-for TASK in $(seq 1 $END)
+for ((TASK=1; TASK<=$END; n++))
 do
 
 filebase=\$(awk ' NR=='\$TASK' { print \$5 ; }' $MASTER)
 
-R1='fastq_trim/'\$filebase'_L001_R1_001.trim.fastq.gz'
-R2='fastq_trim/'\$filebase'_L001_R2_001.trim.fastq.gz'
+R1='fastq_trim_pe/'\$filebase'_L001_R1_001.trim.fastq.gz'
+R2='fastq_trim_pe/'\$filebase'_L001_R2_001.trim.fastq.gz'
 
 OUT=star/\$filebase
 
-STAR --limitGenomeGenerateRAM 62000000000 
+STAR --limitGenomeGenerateRAM 62000000000 \
 --genomeDir $GENOME \
 --readFilesCommand zcat \
 --readFilesIn \$R1 \$R2 \
@@ -205,12 +246,12 @@ done
 
 EOF
 
-command="sbatch --dependency=afterok:$TrimJobArray bash/sbatch-star.sh"
+command="sbatch --dependency=afterok:$PairJobArray bash/sbatch-star.sh"
 StarJob=$($command | awk ' { print $4 }')
-echo '3) Trimmed sequneces submitted for mapping'
+echo '4) Trimmed sequneces submitted for mapping'
 
 #-------------------------------------------------------------------------------
-# PART 4: HTSeq (ARRAY JOB)
+# PART 5: HTSeq (ARRAY JOB)
 
 cat > bash/sbatch-htseq.sh << EOF
 #!/bin/sh
@@ -244,11 +285,11 @@ do
     fi
 done
 echo $HtseqJobArray
-echo '4) Mapped sequences submitted for counting'
+echo '5) Mapped sequences submitted for counting'
 
 
 #-------------------------------------------------------------------------------
-# PART 5: STAR quality control
+# PART 6: STAR quality control
 
 cat > bash/sbatch-star-check.sh << EOF
 #!/bin/bash
@@ -273,7 +314,7 @@ echo '5) Checking Star Log stats'
 
 
 #-------------------------------------------------------------------------------
-# PART 6: HTSeq quality control
+# PART 7: HTSeq quality control
 
 cat > bash/sbatch-htseq-check.sh << EOF
 #!/bin/bash
