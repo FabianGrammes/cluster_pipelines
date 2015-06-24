@@ -13,7 +13,7 @@ do
 key="$1"
 
 case $key in
-    -d|--dirin)
+    -d|--dirin)  # .fastq path
     DIRIN="$2"
     if [ ! -d "$DIRIN" ]; then
 	echo 'ERROR: Directory' $DIRIN 'Does not exist!'
@@ -21,31 +21,23 @@ case $key in
     fi
     shift # past argument
     ;;
-    -s|--samplesheet)
+    -s|--samplesheet) # OPTIONAL: illumina sample sheet
     SHEET="$2"
-    if [ ! -f "$SHEET" ]; then
-	echo 'ERROR: File' $SHEET 'Does not exist!'
-	exit 1
-    fi
     shift # past argument
     ;;
-    -g|--genome)
+    -g|--genome)      # OPTIONAL: path to genome
     GENOME="$2"
-    if [ ! -f "$SHEET" ]; then
-	echo 'ERROR: File' $GENOME 'Does not exist!'
-	exit 1
-    fi
     shift # past argument
     ;;
-    -m|--mastersheet)
+    -m|--mastersheet) # file name of the mastersheet
     MASTER="$2"
     shift # past argument
     ;;
-    --gtf)
-    GTF="$2"
+    --gtf)            # OPTIONAL: path to .gtf
+    GTF="$2" 
     shift # past argument
     ;;
-    -r|--read)
+    -r|--read)        # OPTIONAL: Using STARlong or not
     READ="$2"
     shift # past argument
     ;;
@@ -56,18 +48,26 @@ done
 
 # Default set to Genome: 
 if [ -z "$GENOME" ] 
-then GENOME=/mnt/users/fabig/RNAseq/Ssa_genome/CIG_3.6v2_chrom-NCBI/STAR_index
+then 
+    GENOME=/mnt/users/fabig/RNAseq/Ssa_genome/CIG_3.6v2_chrom-NCBI/STAR_index
 fi
 # Default set to GTF: 
 if [ -z "$GTF" ] 
-then GTF=/mnt/users/fabig/RNAseq/Ssa_genome/CIG_3.6v2_chrom-NCBI/GTF/Salmon_3p6_Chr_NCBI_230415.gtf
+then 
+    GTF=/mnt/users/fabig/RNAseq/Ssa_genome/CIG_3.6v2_chrom-NCBI/GTF/Salmon_3p6_Chr_NCBI_230415.gtf
 fi
+
+# If an Illumina SampleSheet is provided parse it
+if [ -n "$SHEET" ]
+then 
+    python /mnt/users/fabig/cluster_pipelines/RnaMapping/helper_scripts/SampleSheetParser.py -s $SHEET -o $MASTER
+fi
+
 
 # echo all input variables
 echo '--------------------------------------------------------------------------'
 echo 'Input arguments:'
 echo $DIRIN
-echo $SHEET
 echo $GENOME
 echo $GTF
 echo '--------------------------------------------------------------------------'
@@ -75,9 +75,6 @@ echo '--------------------------------------------------------------------------
 # Create the folder tree if it does not exist
 mkdir -p {slurm,bash,fastq_trim,fastq_trim_pe,qc,star,count}
 
-
-# Parse the Illumina sample sheet
-python /mnt/users/fabig/cluster_pipelines/RnaMapping/helper_scripts/SampleSheetParser.py -s $SHEET -o $MASTER
 
 
 END=$(cat $MASTER | wc -l)
