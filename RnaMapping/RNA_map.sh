@@ -183,7 +183,7 @@ filebase=\$(awk ' NR=='\$SLURM_ARRAY_TASK_ID' { print \$5 ; }' $MASTER)
 R1='fastq_trim/'\$filebase'_L001_R1_001.trim.fastq.gz'
 R2='fastq_trim/'\$filebase'_L001_R2_001.trim.fastq.gz'
   
-python $script --f1 \$R1 --f2 \$R2 --c 40 --p fastq_trim_pe
+python \$script --f1 \$R1 --f2 \$R2 --c 40 --p fastq_trim_pe
 
 EOF
 command="sbatch --dependency=afterok:$TrimJobArray bash/sbatch-pairs.sh" # Double quotes are essential!
@@ -207,7 +207,7 @@ echo '3) Trimmed sequneces submitted removing too short reads'
 
 # Calculation: how many cores to use for STAR
 CORES=$(($END * 3))
-if [ $CORES -gt 30 ]
+if [ $CORES -gt 20 ]
 then 
 CORES=30
 fi
@@ -277,12 +277,15 @@ module load samtools anaconda
 module list
 date
 
-filebase=\$(awk ' NR=='\$TASK' { print \$5 ; }' $MASTER)
-IN=star/\$filebase'Aligned.sortedByCoord.out.bam'
+filebase=\$(awk ' NR=='\$SLURM_ARRAY_TASK_ID' { print \$5 ; }' $MASTER)
+INC=star/\$filebase'Aligned.sortedByCoord.out.bam'
+INN=star/\$filebase'Aligned.sortedByName.out.bam'
 OUT=count/\$filebase'.count'
 
-samtools sort -n -O sam -T \$IN | htseq-count -q -s reverse - $GTF > \$OUT
-echo "FINISHED"
+samtools sort -n -o \$INN -T \$INN'.temp' -O bam \$INC
+samtools view \$INN | htseq-count -q -s reverse - $GTF > \$OUT
+
+echo \$OUT "FINISHED"
 EOF
 
 command="sbatch --dependency=afterok:$StarJob bash/sbatch-htseq.sh"
