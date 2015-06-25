@@ -1,6 +1,7 @@
-# RNAmap
+# RNA_map
 
-`RNAmap` is a bash script that automates the processes of:
+`RNA_map` is a bash script that automates the processes of:
+
 1. Trimming of adapter sequences and poor quality nucleotides (cutadapt)
 2. Removing read pairs where one of the reads has less than 40bp
 3. Quality Control (FastQC)
@@ -11,13 +12,12 @@
 The script currently works only if the following conditions are met
 (possible to extend the script for other settings):
 - Libraries were prepared using a *TruSeq stranded Kit*
-- fastq data was generated on a MiSeq
+- fastq data was generated on a MiSeq/NextSeq/HiSeq
 
 ## Example
 
-
 ```bash
-script=/mnt/users/fabig/cluster_pipelines/RnaMapping/RNAmap.sh
+script=/mnt/users/fabig/cluster_pipelines/RnaMapping/RNA_map.sh
 fdir=/mnt/SeqData2/MiSeq_data/150612_M02210_0008_000000000-ACGHJ/Data/Intensities/BaseCalls
 sdir=/mnt/SeqData2/MiSeq_data/150612_M02210_0008_000000000-ACGHJ/Data/Intensities/BaseCalls/SampleSheet.csv
 
@@ -38,7 +38,7 @@ packages installed in your `orion R`
 - `reshape`
 - `gtable`
 
-## RNAmap options
+## RNA_map options
 
 - `-d|--dirin`: Full path of the directory that holds the .fasq.gz
   files
@@ -61,20 +61,18 @@ located at:
 is located at:
 `/mnt/users/fabig/RNAseq/Ssa_genome/CIG_3.6v2_chrom-NCBI/GTF/Salmon_3p6_Chr_NCBI_230415.gtf`
 
-- `-r|--read` *Optional*  Agrument for STAR if the read length is longer than
-  2x250bp, specify `-r long`. If the read length is not longer than
-  2x250bp this argument can be left empty. By default reads shorter
-  than  2x250bp are assumed. *NOTE* this may change,
+- `-r|--read`: Specify short/long depending on if the reads are longer
+  than 2x250bp. *NOTE* this may change,
   depending on if the STAR version gets re-compiled...
 
 ---
 
-`RNAmap` creates a folder tree in the current directory:
+`RNA_map` creates a folder tree in the current directory:
 
 - `slurm` folder to collect the slurm reports. *Note* each slurm report lists:
    - date of job submission
    - version of the used module 
-- `bash` folder to collect the bash scripts, generated and submitted through `RNAmap`.
+- `bash` folder to collect the bash scripts, generated and submitted through `RNA_map`.
 - `fastq_trim` folder for the adaptor and quality trimmed .fastq files.
 - `fastq_trim_pe` Same as above, read pairs where one 1 of the reads
   was found to be too short ( < 40bp ) where removed. Necessary for
@@ -85,8 +83,26 @@ is located at:
 
 ## _master sheet_ format guide
 
-Sample Nr.| Sample Name | TruSeq adaptor ID | TruSeq adaptor seq | FileBase |
----------|-----------|---------------|----------------|--------|
-1	| 0_1 |	A001   | ATCACG |	0-1_S1 |
-2	CTR_1 | A002 | CGATGT	| CTR-1_S2 |
-3	MA_1  | A003 |  TTAGGC |	MA-1_S3 |
+Plain tab delimited text file, no quotes, no header. *Important*
+writing your _master sheet_ in excel and exporting it as .tab will
+most likely cause trouble, so double check !!
+
+Given 3 samples:
+
+- Sample 1: Adaptor A001 (ATCACG)
+	- 0-1_S1_L001_R1_001.fastq.gz
+	- 0-1_S1_L001_R2_001.fastq.gz
+- Sample 2: Adaptor A002 (CGATGT)
+	- CTR-1_S2_L001_R1_001.fastq.gz
+	- CTR-1_S2_L00_R2_001.fastq.gz
+- Sample 3: Adaptor A003 (TTAGGC)
+	- MA-1_S3_L001_R1_001.fastq.gz
+	- MA-1_S3_L001_R2_001.fastq.gz
+
+The _master sheet_ should look like this (without header):
+
+ Sample Name | FileBase | TruSeq adaptor ID | TruSeq adaptor seq |
+---------|-----------|---------------|----------------|
+0_1 |  0-1_S1_L001 |	A001   | ATCACG |
+CTR_1 |  CTR-1_S2_L001 | A002 | CGATGT	| 
+MA_1  | MA-1_S3_L001|  A003 |  TTAGGC |	 |

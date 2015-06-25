@@ -37,31 +37,57 @@ case $key in
     GTF="$2" 
     shift # past argument
     ;;
-    -r|--read)        # OPTIONAL: Using STARlong or not
+    -r|--read)        # long / short 
     READ="$2"
+    shift # past argument
+    ;;
+    --execute)        # Only used for testing!
+    EXECUTE="$2"
     shift # past argument
     ;;
 esac
 shift # past argument or value
 done
-#-------------------------------------------------------------------------------
 
+#-------------------------------------------------------------------------------
 # Default set to Genome: 
 if [ -z "$GENOME" ] 
 then 
     GENOME=/mnt/users/fabig/RNAseq/Ssa_genome/CIG_3.6v2_chrom-NCBI/STAR_index
 fi
+
 # Default set to GTF: 
 if [ -z "$GTF" ] 
 then 
     GTF=/mnt/users/fabig/RNAseq/Ssa_genome/CIG_3.6v2_chrom-NCBI/GTF/Salmon_3p6_Chr_NCBI_230415.gtf
 fi
 
-# If an Illumina SampleSheet is provided parse it
-if [ -n "$SHEET" ]
+#-------------------------------------------------------------------------------
+# Arguments for STAR
+
+# Number of samples
+END=$(cat $MASTER | wc -l)
+
+# Calculation: how many cores to use for STAR
+CORES=$(($END * 3))
+if [ $CORES -gt 20 ]
 then 
-    python /mnt/users/fabig/cluster_pipelines/RnaMapping/helper_scripts/SampleSheetParser.py -s $SHEET -o $MASTER
+CORES=20
 fi
+
+case $READ in 
+    "short")
+	STAR=STAR
+     ;;
+    "long")
+	STAR=STARlong
+     ;;
+    "")
+	echo "-r|read: You have to specify short/long"
+        exit 1
+     ;;
+esac
+
 
 
 # echo all input variables
@@ -77,7 +103,15 @@ mkdir -p {slurm,bash,fastq_trim,fastq_trim_pe,qc,star,count}
 
 
 
-END=$(cat $MASTER | wc -l)
+#===============================================================================
+# ORGANIZE FILENAMES
+
+# If an Illumina SampleSheet is provided parse it
+if [ -n "$SHEET" ]
+then 
+    python /mnt/users/fabig/cluster_pipelines/RnaMapping/helper_scripts/SampleSheetParser.py -s $SHEET -o $MASTER
+fi
+
 
 #-------------------------------------------------------------------------------
 #-------------------------------------------------------------------------------
@@ -94,42 +128,26 @@ module load cutadapt
 module list
 date
   
+FILEBASE=\$(awk ' NR=='\$SLURM_ARRAY_TASK_ID' { print \$2 ; }' $MASTER)
+
+R1=$DIRIN'/'\$FILEBASE'_R1_001.fastq.gz'
+O1='fastq_trim/'\$FILEBASE'_R1_001.trim.fastq.gz'
+R2=$DIRIN'/'\$FILEBASE'_R2_001.fastq.gz'
+O2='fastq_trim/'\$FILEBASE'_R2_001.trim.fastq.gz'
+
 #------READ1---------------------
 adaptorR1=\$(awk ' NR=='\$SLURM_ARRAY_TASK_ID' { print \$4 ; }' $MASTER)
 adaptorR1='GATCGGAAGAGCACACGTCTGAACTCCAGTCAC'\$adaptorR1'ATCTCGTATGCCGTCTTCTGCTTG'
 
-filebase=\$(awk ' NR=='\$SLURM_ARRAY_TASK_ID' { print \$5 ; }' $MASTER)
-
-fileR1=$DIRIN'/'\$filebase'_L001_R1_001.fastq.gz'
-fileO1='fastq_trim/'\$filebase'_L001_R1_001.trim.fastq.gz'
-
-cutadapt -a \$adaptorR1 -q 20 -O 8 -o \$fileO1 \$fileR1
+cutadapt -a \$adaptorR1 -q 20 -O 8 -o \$O1 \$R1
 
 #------READ2---------------------
 adaptorR2='AGATCGGAAGAGCGTCGTGTAGGGAAAGAGTGTAGATCTCGGTGGTCGCCGTATCATT'
 
-fileR2=$DIRIN'/'\$filebase'_L001_R2_001.fastq.gz'
-fileO2='fastq_trim/'\$filebase'_L001_R2_001.trim.fastq.gz'
-
-cutadapt -a \$adaptorR2 -q 20 -O 8 -o \$fileO2 \$fileR2
+cutadapt -a \$adaptorR2 -q 20 -O 8 -o \$O2 \$R2
 
 EOF
 
-# run sbatch file
-command="sbatch bash/sbatch-trim.sh"
-TrimJob=$($command | awk ' { print $4 }')
-for i in $(seq 1 $END)
-do 
-    job=$TrimJob'_'$i
-    if [ -z $TrimJobArray ] 
-    then 
-	TrimJobArray=$job
-    else 
-	TrimJobArray=$TrimJobArray':'$job
-    fi
-done
-echo $TrimJobArray
-echo '1) sequences submitted for trimming'
 
 #-------------------------------------------------------------------------------
 # PART 2: Quality control (ARRAY JOB)
@@ -145,19 +163,15 @@ module load fastqc
 module list
 date
   
-filebase=\$(awk ' NR=='\$SLURM_ARRAY_TASK_ID' { print \$5 ; }' $MASTER)
+FILEBASE=\$(awk ' NR=='\$SLURM_ARRAY_TASK_ID' { print \$2 ; }' $MASTER)
 
-R1='fastq_trim/'\$filebase'_L001_R1_001.trim.fastq.gz'
-R2='fastq_trim/'\$filebase'_L001_R2_001.trim.fastq.gz'
+R1='fastq_trim/'\$FILEBASE'_R1_001.trim.fastq.gz'
+R2='fastq_trim/'\$FILEBASE'_R2_001.trim.fastq.gz'
 
 fastqc -o qc \$R1
 fastqc -o qc \$R2
 
 EOF
-
-command="sbatch --dependency=afterok:$TrimJobArray bash/sbatch-qc.sh" # Double quotes are essential!
-QcJob=$($command | awk ' { print $4 }')
-echo '2) Trimmed sequneces submitted for quality control'
 
 #-------------------------------------------------------------------------------
 # PART 3: Remove reads where one of the pairs is too short
@@ -175,48 +189,17 @@ date
   
 script=/mnt/users/fabig/cluster_pipelines/RnaMapping/helper_scripts/fastqPE.py
   
-filebase=\$(awk ' NR=='\$SLURM_ARRAY_TASK_ID' { print \$5 ; }' $MASTER)
+FILEBASE=\$(awk ' NR=='\$SLURM_ARRAY_TASK_ID' { print \$2 ; }' $MASTER)
 
-R1='fastq_trim/'\$filebase'_L001_R1_001.trim.fastq.gz'
-R2='fastq_trim/'\$filebase'_L001_R2_001.trim.fastq.gz'
+R1='fastq_trim/'\$FILEBASE'_R1_001.trim.fastq.gz'
+R2='fastq_trim/'\$FILEBASE'_R2_001.trim.fastq.gz'
   
 python \$script --f1 \$R1 --f2 \$R2 --c 40 --p fastq_trim_pe
 
 EOF
-command="sbatch --dependency=afterok:$TrimJobArray bash/sbatch-pairs.sh" # Double quotes are essential!
-PairJob=$($command | awk ' { print $4 }')
-for i in $(seq 1 $END)
-do 
-    job=$PairJob'_'$i
-    if [ -z $PairJobArray ] 
-    then 
-	PairJobArray=$job
-    else 
-	PairJobArray=$PairJobArray':'$job
-    fi
-done
-echo $PairJobArray
-
-echo '3) Trimmed sequneces submitted removing too short reads'
 
 #-------------------------------------------------------------------------------
 # PART 4: STAR (LOOP)
-
-# Calculation: how many cores to use for STAR
-CORES=$(($END * 3))
-if [ $CORES -gt 20 ]
-then 
-CORES=30
-fi
-
-# Which STAR command to use
-if [ -z "$READ" ] 
-then 
-   STAR=STAR
-else 
-   STAR=STARlong
-fi
-
 
 cat > bash/sbatch-star.sh << EOF
 #!/bin/bash
@@ -233,12 +216,12 @@ date
 for TASK in {1..$END}
 do
 
-filebase=\$(awk ' NR=='\$TASK' { print \$5 ; }' $MASTER)
+FILEBASE=\$(awk ' NR=='\$SLURM_ARRAY_TASK_ID' { print \$2 ; }' $MASTER)
 
-R1='fastq_trim_pe/'\$filebase'_L001_R1_001.trim.fastq.gz'
-R2='fastq_trim_pe/'\$filebase'_L001_R2_001.trim.fastq.gz'
+R1='fastq_trim_pe/'\$FILEBASE'_R1_001.trim.fastq.gz'
+R2='fastq_trim_pe/'\$FILEBASE'_R2_001.trim.fastq.gz'
 
-OUT=star/\$filebase
+OUT=star/\$FILEBASE
 
 $STAR --limitGenomeGenerateRAM 62000000000 \
 --genomeDir $GENOME \
@@ -256,10 +239,6 @@ done
 
 EOF
 
-command="sbatch --dependency=afterok:$PairJobArray bash/sbatch-star.sh"
-StarJob=$($command | awk ' { print $4 }')
-echo '4) Trimmed sequneces submitted for mapping'
-
 #-------------------------------------------------------------------------------
 # PART 5: HTSeq (ARRAY JOB)
 
@@ -274,16 +253,116 @@ module load samtools anaconda
 module list
 date
 
-filebase=\$(awk ' NR=='\$SLURM_ARRAY_TASK_ID' { print \$5 ; }' $MASTER)
-INC=star/\$filebase'Aligned.sortedByCoord.out.bam'
-INN=star/\$filebase'Aligned.sortedByName.out.bam'
-OUT=count/\$filebase'.count'
+FILEBASE=\$(awk ' NR=='\$SLURM_ARRAY_TASK_ID' { print \$2 ; }' $MASTER)
+INC=star/\$FILEBASE'Aligned.sortedByCoord.out.bam'
+INN=star/\$FILEBASE'Aligned.sortedByName.out.bam'
+OUT=count/\$FILEBASE'.count'
 
 samtools sort -n -o \$INN -T \$INN'.temp' -O bam \$INC
 samtools view \$INN | htseq-count -q -s reverse - $GTF > \$OUT
 
 echo \$OUT "FINISHED"
 EOF
+
+#-------------------------------------------------------------------------------
+# PART 6: STAR quality control
+
+cat > bash/sbatch-star-check.sh << EOF
+#!/bin/bash
+#SBATCH --job-name=STARstat
+#SBATCH -n 1
+#SBATCH --output=slurm/slurm-star-stats%j.out
+
+module load R
+module list
+date
+
+cd star
+R CMD BATCH /mnt/users/fabig/cluster_pipelines/RnaMapping/helper_scripts/STAR_Log.R
+cd ..
+
+EOF
+
+#-------------------------------------------------------------------------------
+# PART 7: HTSeq quality control
+
+cat > bash/sbatch-htseq-check.sh << EOF
+#!/bin/bash
+#SBATCH --job-name=HTstat
+#SBATCH -n 1
+#SBATCH --output=slurm/slurm-htseq-stats-%j.out
+
+module load R
+module list
+date
+
+cd count
+R CMD BATCH /mnt/users/fabig/cluster_pipelines/RnaMapping/helper_scripts/HTseq_plot.R
+cd ..
+
+EOF
+
+#===============================================================================
+#===============================================================================
+# SUBMIT JOBS TO SLURM
+
+
+if [ "$EXECUTE" != "no" ] 
+then
+
+#-------------------------------------------------------------------------------
+# run sbatch file
+command="sbatch bash/sbatch-trim.sh"
+TrimJob=$($command | awk ' { print $4 }')
+for i in $(seq 1 $END)
+do 
+    job=$TrimJob'_'$i
+    if [ -z $TrimJobArray ] 
+    then 
+	TrimJobArray=$job
+    else 
+	TrimJobArray=$TrimJobArray':'$job
+    fi
+done
+echo '---------------'
+echo '1) sequences submitted for trimming'
+echo '   slurm ID:' $TrimJobArray
+
+#-------------------------------------------------------------------------------
+
+command="sbatch --dependency=afterok:$TrimJobArray bash/sbatch-qc.sh" # Double quotes are essential!
+QcJob=$($command | awk ' { print $4 }')
+echo '---------------'
+echo '2) Trimmed sequneces submitted for quality control'
+echo '   slurm ID' $QcJob
+
+#-------------------------------------------------------------------------------
+
+command="sbatch --dependency=afterok:$TrimJobArray bash/sbatch-pairs.sh" # Double quotes are essential!
+PairJob=$($command | awk ' { print $4 }')
+for i in $(seq 1 $END)
+do 
+    job=$PairJob'_'$i
+    if [ -z $PairJobArray ] 
+    then 
+	PairJobArray=$job
+    else 
+	PairJobArray=$PairJobArray':'$job
+    fi
+done
+echo '---------------'
+echo '3) Trimmed sequneces submitted removing too short reads'
+echo '   slurm ID' $PairJobArray
+
+#-------------------------------------------------------------------------------
+
+command="sbatch --dependency=afterok:$PairJobArray bash/sbatch-star.sh"
+StarJob=$($command | awk ' { print $4 }')
+echo '---------------'
+echo '4) Trimmed sequneces submitted for mapping'
+echo '   slurm ID' $StarJob
+
+#-------------------------------------------------------------------------------
 
 command="sbatch --dependency=afterok:$StarJob bash/sbatch-htseq.sh"
 HtseqJob=$($command | awk ' { print $4 }')
@@ -297,55 +376,28 @@ do
 	HtseqJobArray=$HtseqJobArray':'$job
     fi
 done
-echo $HtseqJobArray
+echo '---------------'
 echo '5) Mapped sequences submitted for counting'
-
+echo '   slurm ID' $HtseqJobArray
 
 #-------------------------------------------------------------------------------
-# PART 6: STAR quality control
-
-cat > bash/sbatch-star-check.sh << EOF
-#!/bin/bash
-#SBATCH --job-name=STARstat
-#SBATCH -n $CORES
-#SBATCH -N 1
-#SBATCH --output=SLURM/slurm-star-stats%j.out
-
-module load R
-module list
-date
-
-cd star
-R CMD BATCH /mnt/users/fabig/cluster_pipelines/RnaMapping/helper_scripts/STAR_Log.R
-cd ..
-
-EOF
 
 command="sbatch --dependency=afterok:$HtseqJobArray bash/sbatch-star-check.sh"
 StarStatJob=$($command | awk ' { print $4 }')
+echo '---------------'
 echo '5) Checking Star Log stats'
-
+echo '   slurm ID' $StarStatJob
 
 #-------------------------------------------------------------------------------
-# PART 7: HTSeq quality control
-
-cat > bash/sbatch-htseq-check.sh << EOF
-#!/bin/bash
-#SBATCH --job-name=HTstat
-#SBATCH -n $CORES
-#SBATCH -N 1
-#SBATCH --output=SLURM/slurm-htseq-stats-%j.out
-
-module load R
-module list
-date
-
-cd count
-R CMD BATCH /mnt/users/fabig/cluster_pipelines/RnaMapping/helper_scripts/HTseq_plot.R
-cd ..
-
-EOF
 
 command="sbatch --dependency=afterok:$HtseqJobArray bash/sbatch-htseq-check.sh"
-StarStatJob=$($command | awk ' { print $4 }')
+HtseqStatJob=$($command | awk ' { print $4 }')
+echo '---------------'
 echo '6) Checking HTSeq counting stats'
+echo '   slurm ID' $HtseqStatJob
+
+else
+    echo '=================='
+    echo 'Nothing submitted!'
+    echo '=================='
+fi

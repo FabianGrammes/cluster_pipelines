@@ -45,10 +45,11 @@ data = filter_data( args.s )
 out = open( args.o, 'w')
 for i in data:
     if i[0] != '' and i[1] == '':
-        out.write('%s\t%s\t%s\t%s\t%s\n' % ( i[8], i[0], i[4], i[5], i[0].replace('_','-')+'_S'+i[8]))
+        out.write('%s\t%s\t%s\t%s\n' % ( i[0], i[0].replace('_','-')+'_S'+i[8]+'_L001' , i[4], i[5] ))
     elif i[0] == '' and i[1] != '':
-        out.write('%s\t%s\t%s\t%s\t%s\n' % ( i[8], i[1], i[4], i[5], i[1].replace('_','-')+'_S'+i[8]))
+        out.write('%s\t%s\t%s\t%s\n' % ( i[1], i[1].replace('_','-')+'_S'+i[8]+'_L001' , i[4], i[5] ))
     elif i[0] != '' and i[1] != '':
-        out.write('%s\t%s\t%s\t%s\t%s\n' % ( i[8], i[1], i[4], i[5], i[1].replace('_','-')+'_S'+i[8]))
+        out.write('%s\t%s\t%s\t%s\n' % ( i[1], i[1].replace('_','-')+'_S'+i[8]+'_L001' , i[4], i[5] ))
         
 out.close()
+
