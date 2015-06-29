@@ -216,7 +216,7 @@ date
 for TASK in {1..$END}
 do
 
-FILEBASE=\$(awk ' NR=='\$SLURM_ARRAY_TASK_ID' { print \$2 ; }' $MASTER)
+FILEBASE=\$(awk ' NR=='\$TASK' { print \$2 ; }' $MASTER)
 
 R1='fastq_trim_pe/'\$FILEBASE'_R1_001.trim.fastq.gz'
 R2='fastq_trim_pe/'\$FILEBASE'_R2_001.trim.fastq.gz'

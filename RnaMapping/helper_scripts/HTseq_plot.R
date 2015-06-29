@@ -23,7 +23,7 @@ HTSeq.logs <- function(path=NULL){
     logsF = file.path(path, logs)
     data = do.call("cbind", lapply(logsF, function(df) reader(df)))
     data1 = apply(data, 2, as.numeric)
-    data1 = apply(data1, 2, function(x) x/sum(x))
+    #data1 = apply(data1, 2, function(x) x/sum(x))
     row.names(data1) = row.names(data)
     colnames(data1) = gsub(".count", "", logs)
     return(data1)
