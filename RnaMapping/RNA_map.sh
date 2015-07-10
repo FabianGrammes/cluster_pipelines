@@ -53,13 +53,13 @@ done
 # Default set to Genome: 
 if [ -z "$GENOME" ] 
 then 
-    GENOME=/mnt/users/fabig/RNAseq/Ssa_genome/CIG_3.6v2_chrom-NCBI/STAR_index
+    GENOME=/mnt/users/fabig/Ssa_genome/CIG_3.6v2_chrom-NCBI/STAR_index
 fi
 
 # Default set to GTF: 
 if [ -z "$GTF" ] 
 then 
-    GTF=/mnt/users/fabig/RNAseq/Ssa_genome/CIG_3.6v2_chrom-NCBI/GTF/Salmon_3p6_Chr_NCBI_230415.gtf
+    GTF=/mnt/users/fabig/Ssa_genome/CIG_3.6v2_chrom-NCBI/GTF/Salmon_3p6_Chr_070715_All.filter.gtf
 fi
 
 #-------------------------------------------------------------------------------
