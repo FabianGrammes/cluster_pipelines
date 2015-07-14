@@ -50,10 +50,18 @@ shift # past argument or value
 done
 
 #-------------------------------------------------------------------------------
+echo '--------------------------------------------------------------------------'
 # Default set to Genome: 
 if [ -z "$GENOME" ] 
 then 
     GENOME=/mnt/users/fabig/Ssa_genome/CIG_3.6v2_chrom-NCBI/STAR_index
+fi
+# check if Genome file exists
+if [ ! -d "$GENOME" ]; then
+   echo 'ERROR: File' $GENOME 'Does not exist!'
+   exit 1
+else 
+    echo 'FOUND: File' $GENOME
 fi
 
 # Default set to GTF: 
@@ -61,18 +69,47 @@ if [ -z "$GTF" ]
 then 
     GTF=/mnt/users/fabig/Ssa_genome/CIG_3.6v2_chrom-NCBI/GTF/Salmon_3p6_Chr_070715_All.filter.gtf
 fi
+# check if GTF file exists
+if [ ! -f "$GTF" ]; then
+    echo 'ERROR: File' $GTF 'Does not exist!'
+    exit 1
+else 
+    echo 'FOUND: File' $GTF 
+fi
+
+if [ -f "$SHEET" ]; then
+    echo 'FOUND: File' $SHEET
+fi
+
+
+#-------------------------------------------------------------------------------
+# If an Illumina SampleSheet is provided parse it
+if [ -n "$SHEET" ]
+then 
+    python /mnt/users/fabig/cluster_pipelines/RnaMapping/helper_scripts/SampleSheetParser.py -s $SHEET -o $MASTER
+else
+    if cat -v $MASTER | grep -q '\^M' 
+    then
+	 echo 'Converting line terminators'
+	 sed 's/\r/\n/g' $MASTER > sheet.tmp
+	 mv sheet.tmp $MASTER
+    else
+	echo 'Line terminators seem correct'
+    fi
+fi
 
 #-------------------------------------------------------------------------------
 # Arguments for STAR
 
 # Number of samples
 END=$(cat $MASTER | wc -l)
+echo 'SAMPLES:' $END
 
 # Calculation: how many cores to use for STAR
 CORES=$(($END * 3))
 if [ $CORES -gt 20 ]
 then 
-CORES=20
+    CORES=20
 fi
 
 case $READ in 
@@ -96,6 +133,7 @@ echo 'Input arguments:'
 echo $DIRIN
 echo $GENOME
 echo $GTF
+echo $STAR
 echo '--------------------------------------------------------------------------'
 
 # Create the folder tree if it does not exist
@@ -104,13 +142,7 @@ mkdir -p {slurm,bash,fastq_trim,fastq_trim_pe,qc,star,count}
 
 
 #===============================================================================
-# ORGANIZE FILENAMES
 
-# If an Illumina SampleSheet is provided parse it
-if [ -n "$SHEET" ]
-then 
-    python /mnt/users/fabig/cluster_pipelines/RnaMapping/helper_scripts/SampleSheetParser.py -s $SHEET -o $MASTER
-fi
 
 
 #-------------------------------------------------------------------------------
@@ -368,7 +400,7 @@ command="sbatch --dependency=afterok:$StarJob bash/sbatch-htseq.sh"
 HtseqJob=$($command | awk ' { print $4 }')
 for i in $(seq 1 $END)
 do 
-    job=$TrimJob'_'$i
+    job=$HtseqJob'_'$i
     if [ -z $HtseqJobArray ] 
     then 
 	HtseqJobArray=$job
