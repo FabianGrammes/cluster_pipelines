@@ -99,8 +99,8 @@ plot.all <- function(x){
 
 
 data <- star.logs()
-write.table(data, file = "STAR_Log_Stat.txt", sep="\t", col.names=T, row.names=T, quote=F)
+write.table(data, file = "../mapp_summary/STAR_Log_Stat.txt", sep="\t", col.names=T, row.names=T, quote=F)
 data$ID <- factor(row.names(data), levels = row.names(data))
-pdf("STAR_Log_Stat.pdf", height=12, width=13)
+pdf("../mapp_summary/STAR_Log_Stat.pdf", height=12, width=13)
 plot.all(data)
 dev.off()

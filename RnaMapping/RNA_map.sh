@@ -41,7 +41,7 @@ case $key in
     READ="$2"
     shift # past argument
     ;;
-    --execute)        # Only used for testing!
+    --execute)        # Only used for testing; use --execute no
     EXECUTE="$2"
     shift # past argument
     ;;
@@ -137,7 +137,7 @@ echo $STAR
 echo '--------------------------------------------------------------------------'
 
 # Create the folder tree if it does not exist
-mkdir -p {slurm,bash,fastq_trim,fastq_trim_pe,qc,star,count}
+mkdir -p {slurm,bash,fastq_trim,fastq_trim_pe,qc,star,count,mapp_summary}
 
 
 
