@@ -2,12 +2,13 @@
 
 `RNA_map` is a bash script that automates the processes of:
 
-1. Trimming of adapter sequences and poor quality nucleotides (cutadapt)
-2. Removing read pairs where one of the reads has less than 40bp
-3. Quality Control (FastQC)
-4. Mapping reads to the genome (STAR)
-5. Read counting per gene (HTSeq)
-6. Summary statistics 
+1. Trimming of adapter sequences and poor quality nucleotides
+   (cutadapt); Removing read pairs where one of the reads has less than 40bp 
+2. Quality Control (FastQC)
+3. Mapping reads to the genome (STAR)
+4. Read counting per gene (HTSeq)
+5. Summary statistics
+6. Copy to common folder
 
 The script currently works only if the following conditions are met
 (possible to extend the script for other settings):
@@ -16,12 +17,16 @@ The script currently works only if the following conditions are met
 
 ## Example
 
+It's usually a *good idea* to run the script with the option: `--execute
+no`; Check that the number of samples as well as the ID of the first
+and last sample are correct; and than run the whole stuff. 
+
 ```bash
 script=/mnt/users/fabig/cluster_pipelines/RnaMapping/RNA_map.sh
 fdir=/mnt/SeqData2/MiSeq_data/150612_M02210_0008_000000000-ACGHJ/Data/Intensities/BaseCalls
 sdir=/mnt/SeqData2/MiSeq_data/150612_M02210_0008_000000000-ACGHJ/Data/Intensities/BaseCalls/SampleSheet.csv
 
-bash $script -d $fdir -s $sdir -m SampleMaster.txt
+bash $script -d $fdir -s $sdir -m Samples.txt -r long --copy test --desc description.txt --execute no
 ```
 
 ### Reports
@@ -40,30 +45,41 @@ packages installed in your `orion R`
 
 ## RNA_map options
 
-- `-d|--dirin`: Full path of the directory that holds the .fasq.gz
+- `-d|--dirin`: *Required* Full path of the directory that holds the .fasq.gz
   files
 
-- `-g|--genome`: *Optional*, defaults to the latest version of the _Salmon salar_ genome which is
-located at:
+- `-g|--genome`: *Optional*, defaults to the latest version of the
+  _Salmon salar_ genome,  located at:
 `/mnt/users/fabig/RNAseq/Ssa_genome/CIG_3.6v2_chrom-NCBI/STAR_index`
+
+- `--gtf`: *Optional*, defaults to the latest _Salmon salar_ gtf which
+is located at:
+`/mnt/users/fabig/Ssa_genome/CIG_3.6v2_chrom-NCBI/GTF/Salmon_3p6_Chr_070715_All.filter.gtf`
 
 - `-s|--samplesheet`:  *Optional*  Full path to the Illumina _sample
   sheet_ (.`.csv` format). 
 
-- `-m|--mastersheet`: Name of the _master sheet_, this will be created
+- `-m|--mastersheet`: *Required* Name of the _master sheet_, this will be created
   in the current directory and contains all relevant sample
   information. Information is extracted from the _sample sheet_ and
   arranged in a more user friendly way. If argument `-s|--samplesheet`
   is empty then `-m|--mastersheet` needs to point to a _master sheet_
   file (see _master sheet_ format guide)
 
-- `--gtf`: *Optional*, defaults to the latest _Salmon salar_ gtf which
-is located at:
-`/mnt/users/fabig/Ssa_genome/CIG_3.6v2_chrom-NCBI/GTF/Salmon_3p6_Chr_070715_All.filter.gtf`
+- `-r|--read`: *Optional* Specify short/long depending on if the reads are longer
+  than 2x250bp. Defaults to short.
 
-- `-r|--read`: Specify short/long depending on if the reads are longer
-  than 2x250bp. *NOTE* this may change,
-  depending on if the STAR version gets re-compiled...
+- `--copy`: *Required* Name of the common folder where a copy of
+  - count
+  - mapping_summary
+  - mastersheet
+  will be placed. When set to `no` nothing will be copied
+
+- `--desc`: *Required* Short description file giving the basic informations about
+  the experiment ( see _description file_ format guid ). 
+
+- `--execute`: If set to `no` all folders/scripts will be genearted,
+  but none of the jobs will be executed. 
 
 ---
 
@@ -73,8 +89,8 @@ is located at:
    - date of job submission
    - version of the used module 
 - `bash` folder to collect the bash scripts, generated and submitted through `RNA_map`.
-- `fastq_trim` folder for the adaptor and quality trimmed .fastq files.
-- `fastq_trim_pe` Same as above, read pairs where one 1 of the reads
+- `fastq_trim` folder for the adaptor and quality trimmed .fastq
+  file, read pairs where  one 1 of the reads
   was found to be too short ( < 40bp ) where removed. Necessary for
   STAR to function properly. 
 - `qc` folder for the quality control reports of the quality trimmed .fastq files.
@@ -105,3 +121,11 @@ sample |	base |	adapter.id |	adapter.seq
 0_1 |  0-1_S1_L001 |	A001   | ATCACG |
 CTR_1 |  CTR-1_S2_L001 | A002 | CGATGT	| 
 MA_1  | MA-1_S3_L001|  A003 |  TTAGGC |	 |
+
+## _description file_ format guide
+
+The following information should be contained in the description file:
+1. Organism
+2. Tissue
+3. Date, contact person
+4. 2-3 Sentences about goal/setup of the experiment

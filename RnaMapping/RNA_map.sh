@@ -41,6 +41,14 @@ case $key in
     READ="$2"
     shift # past argument
     ;;
+    --copy) 
+    CCOPY="$2"
+    shift # past argument
+    ;;
+    --desc) 
+    DESC="$2"
+    shift # past argument
+    ;;
     --execute)        # Only used for testing; use --execute no
     EXECUTE="$2"
     shift # past argument
@@ -83,6 +91,33 @@ fi
 
 
 #-------------------------------------------------------------------------------
+# Checks for common folder copy
+
+COMMON=/mnt/SALMON-SEQDATA/CIGENE-DATA/GENE-EXPRESSION
+
+if [ "$CCOPY" != "no" -a -n "$CCOPY" ]; then
+    # 1st check if the folder already exists
+    if [ -d $COMMON/$CCOPY ]; then
+	echo 'ERROR! Folder: ' $COMMON/$CCOPY ' already exists!'
+        echo 'Please pick a different name'
+	exit 1
+    # 2nd check for description file
+    else
+	if [ ! -f "$DESC" ]; then
+	    echo 'ERROR: Can not find the description file!'
+	    echo 'You need to provide a short description file.'
+	    exit 1
+	fi
+    fi 
+else 
+    if [ -z "$CCOPY" ]; then
+	echo 'ERROR! You have to provide a folder name!'
+	exit 1
+    fi
+fi
+
+
+#-------------------------------------------------------------------------------
 # If an Illumina SampleSheet is provided parse it
 if [ -n "$SHEET" ]
 then 
@@ -103,9 +138,9 @@ fi
 
 # Number of samples
 END=$(sed '1d' $MASTER | wc -l) # skip hearder line
-echo 'SAMPLES:' $END
 
-# Calculation: how many cores to use for STAR
+
+# Calculation: how many cores to use for STAR, max 20
 CORES=$(($END * 3))
 if [ $CORES -gt 20 ]
 then 
@@ -128,18 +163,28 @@ esac
 
 
 # echo all input variables
-echo '--------------------------------------------------------------------------'
+echo '++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++'
 echo 'Input arguments:'
+echo '-----------------------'
+echo 'Location of .fastq files:'
 echo $DIRIN
+echo 'Genome Version:'
 echo $GENOME
+echo '.gtf file'
 echo $GTF
+echo 'STAR command:'
 echo $STAR
-echo '--------------------------------------------------------------------------'
+echo '-----------------------'
+echo 'Number of samples= ' $END
+echo 'FIRST sample:' $(awk ' NR=='2' { print $1 $2 $3 $4 ; }' $MASTER)
+echo 'LAST sample:' $(awk ' NR=='$END+1' { print $1 $2 $3 $4 ; }' $MASTER)
+echo '-----------------------'
+echo 'Copy to common foder:'
+echo $COMMON/$CCOPY
+echo '++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++'
 
 # Create the folder tree if it does not exist
 mkdir -p {slurm,bash,fastq_trim,qc,star,count,mapp_summary}
-
-
 
 #===============================================================================
 
@@ -307,6 +352,29 @@ cd ..
 
 EOF
 
+#-------------------------------------------------------------------------------
+# PART 8: COPY results to common dierectory
+
+cat > bash/sbatch-copy.sh << EOF
+#!/bin/bash
+#SBATCH --job-name=copy
+#SBATCH -n 1
+#SBATCH --output=slurm/slurm-copy-%j.out
+
+module list
+date
+
+mkdir $COMMON/$CCOPY/counts
+mkdir $COMMON/$CCOPY/mapp_summary
+
+cp counts/* $COMMON/$CCOPY/counts/
+cp mapp_summary/* $COMMON/$CCOPY/mapp_summary/
+cp $MASTER $COMMON/$CCOPY/
+cp $DESC $COMMON/$CCOPY/
+
+EOF
+
+
 #===============================================================================
 #===============================================================================
 # SUBMIT JOBS TO SLURM
@@ -315,76 +383,88 @@ EOF
 if [ "$EXECUTE" != "no" ] 
 then
 
-#-------------------------------------------------------------------------------
-# run sbatch file
-command="sbatch bash/sbatch-trim.sh"
-TrimJob=$($command | awk ' { print $4 }')
-for i in $(seq 1 $END)
-do 
-    job=$TrimJob'_'$i
-    if [ -z $TrimJobArray ] 
-    then 
-	TrimJobArray=$job
-    else 
-	TrimJobArray=$TrimJobArray':'$job
+    #-------------------------------------------------------------------------------
+    # run sbatch file
+    command="sbatch bash/sbatch-trim.sh"
+    TrimJob=$($command | awk ' { print $4 }')
+    for i in $(seq 1 $END)
+    do 
+	job=$TrimJob'_'$i
+	if [ -z $TrimJobArray ] 
+	then 
+	    TrimJobArray=$job
+	else 
+	    TrimJobArray=$TrimJobArray':'$job
+	fi
+    done
+    echo '---------------'
+    echo '1) sequences submitted for trimming'
+    echo '   slurm ID:' $TrimJobArray
+
+    #-------------------------------------------------------------------------------
+
+    command="sbatch --dependency=afterok:$TrimJobArray bash/sbatch-qc.sh" # Double quotes are essential!
+    QcJob=$($command | awk ' { print $4 }')
+    echo '---------------'
+    echo '2) Trimmed sequneces submitted for quality control'
+    echo '   slurm ID' $QcJob
+
+    #-------------------------------------------------------------------------------
+
+    command="sbatch --dependency=afterok:$TrimJobArray bash/sbatch-star.sh"
+    StarJob=$($command | awk ' { print $4 }')
+    echo '---------------'
+    echo '4) Trimmed sequneces submitted for mapping'
+    echo '   slurm ID' $StarJob
+
+    #-------------------------------------------------------------------------------
+
+    command="sbatch --dependency=afterok:$StarJob bash/sbatch-htseq.sh"
+    HtseqJob=$($command | awk ' { print $4 }')
+    for i in $(seq 1 $END)
+    do 
+	job=$HtseqJob'_'$i
+	if [ -z $HtseqJobArray ] 
+	then 
+	    HtseqJobArray=$job
+	else 
+	    HtseqJobArray=$HtseqJobArray':'$job
+	fi
+    done
+    echo '---------------'
+    echo '5) Mapped sequences submitted for counting'
+    echo '   slurm ID' $HtseqJobArray
+
+    #-------------------------------------------------------------------------------
+
+    command="sbatch --dependency=afterok:$HtseqJobArray bash/sbatch-star-check.sh"
+    StarStatJob=$($command | awk ' { print $4 }')
+    echo '---------------'
+    echo '5) Checking Star Log stats'
+    echo '   slurm ID' $StarStatJob
+
+    #-------------------------------------------------------------------------------
+
+    command="sbatch --dependency=afterok:$HtseqJobArray bash/sbatch-htseq-check.sh"
+    HtseqStatJob=$($command | awk ' { print $4 }')
+    echo '---------------'
+    echo '6) Checking HTSeq counting stats'
+    echo '   slurm ID' $HtseqStatJob
+    #-------------------------------------------------------------------------------
+
+    # COPY files to common dierectory
+    
+    if [ "$CCOPY" != "no" -a -n "$CCOPY" ]; then
+	command="sbatch --dependency=afterok:$HtseqJobArray bash/sbatch-copy.sh"
+	CopyJob=$($command | awk ' { print $4 }')
+	echo '---------------'
+	echo '7) Copying file to common dierectory'
+	echo '   slurm ID' $CopyJob
     fi
-done
-echo '---------------'
-echo '1) sequences submitted for trimming'
-echo '   slurm ID:' $TrimJobArray
-
-#-------------------------------------------------------------------------------
-
-command="sbatch --dependency=afterok:$TrimJobArray bash/sbatch-qc.sh" # Double quotes are essential!
-QcJob=$($command | awk ' { print $4 }')
-echo '---------------'
-echo '2) Trimmed sequneces submitted for quality control'
-echo '   slurm ID' $QcJob
-
-#-------------------------------------------------------------------------------
-
-command="sbatch --dependency=afterok:$TrimJobArray bash/sbatch-star.sh"
-StarJob=$($command | awk ' { print $4 }')
-echo '---------------'
-echo '4) Trimmed sequneces submitted for mapping'
-echo '   slurm ID' $StarJob
-
-#-------------------------------------------------------------------------------
-
-command="sbatch --dependency=afterok:$StarJob bash/sbatch-htseq.sh"
-HtseqJob=$($command | awk ' { print $4 }')
-for i in $(seq 1 $END)
-do 
-    job=$HtseqJob'_'$i
-    if [ -z $HtseqJobArray ] 
-    then 
-	HtseqJobArray=$job
-    else 
-	HtseqJobArray=$HtseqJobArray':'$job
-    fi
-done
-echo '---------------'
-echo '5) Mapped sequences submitted for counting'
-echo '   slurm ID' $HtseqJobArray
-
-#-------------------------------------------------------------------------------
-
-command="sbatch --dependency=afterok:$HtseqJobArray bash/sbatch-star-check.sh"
-StarStatJob=$($command | awk ' { print $4 }')
-echo '---------------'
-echo '5) Checking Star Log stats'
-echo '   slurm ID' $StarStatJob
-
-#-------------------------------------------------------------------------------
-
-command="sbatch --dependency=afterok:$HtseqJobArray bash/sbatch-htseq-check.sh"
-HtseqStatJob=$($command | awk ' { print $4 }')
-echo '---------------'
-echo '6) Checking HTSeq counting stats'
-echo '   slurm ID' $HtseqStatJob
 
 else
     echo '=================='
     echo 'Nothing submitted!'
     echo '=================='
 fi
+
