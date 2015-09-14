@@ -59,7 +59,7 @@ located at:
 
 - `--gtf`: *Optional*, defaults to the latest _Salmon salar_ gtf which
 is located at:
-`/mnt/users/fabig/RNAseq/Ssa_genome/CIG_3.6v2_chrom-NCBI/GTF/Salmon_3p6_Chr_NCBI_230415.gtf`
+`/mnt/users/fabig/Ssa_genome/CIG_3.6v2_chrom-NCBI/GTF/Salmon_3p6_Chr_070715_All.filter.gtf`
 
 - `-r|--read`: Specify short/long depending on if the reads are longer
   than 2x250bp. *NOTE* this may change,
@@ -84,8 +84,7 @@ is located at:
 ## _master sheet_ format guide
 
 Plain tab delimited text file, no quotes, no header. *Important*
-writing your _master sheet_ in excel and exporting it as .tab will
-most likely cause trouble, so double check !!
+writing your _master sheet_ in excel works.
 
 Given 3 samples:
 
@@ -99,10 +98,10 @@ Given 3 samples:
 	- MA-1_S3_L001_R1_001.fastq.gz
 	- MA-1_S3_L001_R2_001.fastq.gz
 
-The _master sheet_ should look like this (without header):
+The _master sheet_ should look like this (WITH header):
 
- Sample Name | FileBase | TruSeq adaptor ID | TruSeq adaptor seq |
 ---------|-----------|---------------|----------------|
+sample |	base |	adapter.id |	adapter.seq
 0_1 |  0-1_S1_L001 |	A001   | ATCACG |
 CTR_1 |  CTR-1_S2_L001 | A002 | CGATGT	| 
 MA_1  | MA-1_S3_L001|  A003 |  TTAGGC |	 |

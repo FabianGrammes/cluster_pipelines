@@ -43,6 +43,7 @@ data = filter_data( args.s )
 
 # Write output 
 out = open( args.o, 'w')
+out.write('%s\t%s\t%s\t%s\n' % ( 'sample', 'base', 'adapter.id', 'adapter.seq' ))
 for i in data:
     if i[0] != '' and i[1] == '':
         out.write('%s\t%s\t%s\t%s\n' % ( i[0], i[0].replace('_','-')+'_S'+i[8]+'_L001' , i[4], i[5] ))

@@ -102,7 +102,7 @@ fi
 # Arguments for STAR
 
 # Number of samples
-END=$(cat $MASTER | wc -l)
+END=$(sed '1d' $MASTER | wc -l) # skip hearder line
 echo 'SAMPLES:' $END
 
 # Calculation: how many cores to use for STAR
@@ -137,7 +137,7 @@ echo $STAR
 echo '--------------------------------------------------------------------------'
 
 # Create the folder tree if it does not exist
-mkdir -p {slurm,bash,fastq_trim,fastq_trim_pe,qc,star,count,mapp_summary}
+mkdir -p {slurm,bash,fastq_trim,qc,star,count,mapp_summary}
 
 
 
@@ -156,11 +156,11 @@ cat > bash/sbatch-trim.sh << EOF
 #SBATCH --job-name=TRIMMER
 #SBATCH --output=slurm/trim-%A_%a.out
   
-module load cutadapt
+module load anaconda
 module list
 date
   
-FILEBASE=\$(awk ' NR=='\$SLURM_ARRAY_TASK_ID' { print \$2 ; }' $MASTER)
+FILEBASE=\$(awk ' NR=='\$SLURM_ARRAY_TASK_ID+1' { print \$2 ; }' $MASTER)
 
 R1=$DIRIN'/'\$FILEBASE'_R1_001.fastq.gz'
 O1='fastq_trim/'\$FILEBASE'_R1_001.trim.fastq.gz'
@@ -171,12 +171,10 @@ O2='fastq_trim/'\$FILEBASE'_R2_001.trim.fastq.gz'
 adaptorR1=\$(awk ' NR=='\$SLURM_ARRAY_TASK_ID' { print \$4 ; }' $MASTER)
 adaptorR1='GATCGGAAGAGCACACGTCTGAACTCCAGTCAC'\$adaptorR1'ATCTCGTATGCCGTCTTCTGCTTG'
 
-cutadapt -a \$adaptorR1 -q 20 -O 8 -o \$O1 \$R1
-
 #------READ2---------------------
 adaptorR2='AGATCGGAAGAGCGTCGTGTAGGGAAAGAGTGTAGATCTCGGTGGTCGCCGTATCATT'
 
-cutadapt -a \$adaptorR2 -q 20 -O 8 -o \$O2 \$R2
+cutadapt -q 20 -O 8 --minimum-length 40 -a \$adaptorR1 -A \$adaptorR2 -o \$O1 -p \$O2 \$R1 \$R2
 
 EOF
 
@@ -195,38 +193,13 @@ module load fastqc
 module list
 date
   
-FILEBASE=\$(awk ' NR=='\$SLURM_ARRAY_TASK_ID' { print \$2 ; }' $MASTER)
+FILEBASE=\$(awk ' NR=='\$SLURM_ARRAY_TASK_ID+1' { print \$2 ; }' $MASTER)
 
 R1='fastq_trim/'\$FILEBASE'_R1_001.trim.fastq.gz'
 R2='fastq_trim/'\$FILEBASE'_R2_001.trim.fastq.gz'
 
 fastqc -o qc \$R1
 fastqc -o qc \$R2
-
-EOF
-
-#-------------------------------------------------------------------------------
-# PART 3: Remove reads where one of the pairs is too short
-
-cat > bash/sbatch-pairs.sh << EOF
-#!/bin/sh
-#SBATCH --ntasks=1
-#SBATCH --job-name=paired
-#SBATCH --array=1-$END
-#SBATCH --output=slurm/trimPE-%A_%a.out
-  
-module load anaconda
-module list
-date
-  
-script=/mnt/users/fabig/cluster_pipelines/RnaMapping/helper_scripts/fastqPE.py
-  
-FILEBASE=\$(awk ' NR=='\$SLURM_ARRAY_TASK_ID' { print \$2 ; }' $MASTER)
-
-R1='fastq_trim/'\$FILEBASE'_R1_001.trim.fastq.gz'
-R2='fastq_trim/'\$FILEBASE'_R2_001.trim.fastq.gz'
-  
-python \$script --f1 \$R1 --f2 \$R2 --c 40 --p fastq_trim_pe
 
 EOF
 
@@ -248,10 +221,10 @@ date
 for TASK in {1..$END}
 do
 
-FILEBASE=\$(awk ' NR=='\$TASK' { print \$2 ; }' $MASTER)
+FILEBASE=\$(awk ' NR=='\$TASK+1' { print \$2 ; }' $MASTER)
 
-R1='fastq_trim_pe/'\$FILEBASE'_R1_001.trim.fastq.gz'
-R2='fastq_trim_pe/'\$FILEBASE'_R2_001.trim.fastq.gz'
+R1='fastq_trim/'\$FILEBASE'_R1_001.trim.fastq.gz'
+R2='fastq_trim/'\$FILEBASE'_R2_001.trim.fastq.gz'
 
 OUT=star/\$FILEBASE
 
@@ -285,7 +258,7 @@ module load samtools anaconda
 module list
 date
 
-FILEBASE=\$(awk ' NR=='\$SLURM_ARRAY_TASK_ID' { print \$2 ; }' $MASTER)
+FILEBASE=\$(awk ' NR=='\$SLURM_ARRAY_TASK_ID+1' { print \$2 ; }' $MASTER)
 INC=star/\$FILEBASE'Aligned.sortedByCoord.out.bam'
 INN=star/\$FILEBASE'Aligned.sortedByName.out.bam'
 OUT=count/\$FILEBASE'.count'
@@ -370,25 +343,7 @@ echo '   slurm ID' $QcJob
 
 #-------------------------------------------------------------------------------
 
-command="sbatch --dependency=afterok:$TrimJobArray bash/sbatch-pairs.sh" # Double quotes are essential!
-PairJob=$($command | awk ' { print $4 }')
-for i in $(seq 1 $END)
-do 
-    job=$PairJob'_'$i
-    if [ -z $PairJobArray ] 
-    then 
-	PairJobArray=$job
-    else 
-	PairJobArray=$PairJobArray':'$job
-    fi
-done
-echo '---------------'
-echo '3) Trimmed sequneces submitted removing too short reads'
-echo '   slurm ID' $PairJobArray
-
-#-------------------------------------------------------------------------------
-
-command="sbatch --dependency=afterok:$PairJobArray bash/sbatch-star.sh"
+command="sbatch --dependency=afterok:$TrimJobArray bash/sbatch-star.sh"
 StarJob=$($command | awk ' { print $4 }')
 echo '---------------'
 echo '4) Trimmed sequneces submitted for mapping'
