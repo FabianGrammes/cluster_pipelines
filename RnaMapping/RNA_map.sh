@@ -5,6 +5,8 @@ date
 
 # sh script_test.sh -d -s -m
 
+SCRIPTPATH
+
 #-------------------------------------------------------------------------------
 # Read script arguments and check if files/dirs exist
 
@@ -21,38 +23,38 @@ case $key in
     fi
     shift # past argument
     ;;
-    -s|--samplesheet) # OPTIONAL: illumina sample sheet
-    SHEET="$2"
-    shift # past argument
-    ;;
     -g|--genome)      # OPTIONAL: path to genome
-    GENOME="$2"
-    shift # past argument
-    ;;
+	GENOME="$2"
+	shift # past argument
+	;;
     -m|--mastersheet) # file name of the mastersheet
-    MASTER="$2"
-    shift # past argument
-    ;;
+	MASTER="$2"
+	shift # past argument
+	;;
     --gtf)            # OPTIONAL: path to .gtf
-    GTF="$2" 
-    shift # past argument
-    ;;
+	GTF="$2" 
+	shift # past argument
+	;;
+    --stranded)       # OPTIOANL: yes/no/reverse Defaults to reverse
+	STRANDED="$2"
+	shift
+	;;
     -r|--read)        # long / short 
-    READ="$2"
-    shift # past argument
-    ;;
+	READ="$2"
+	shift # past argument
+	;;
     --copy) 
-    CCOPY="$2"
-    shift # past argument
-    ;;
+	CCOPY="$2"
+	shift # past argument
+	;;
     --desc) 
-    DESC="$2"
-    shift # past argument
-    ;;
+	DESC="$2"
+	shift # past argument
+	;;
     --execute)        # Only used for testing; use --execute no
-    EXECUTE="$2"
-    shift # past argument
-    ;;
+	EXECUTE="$2"
+	shift # past argument
+	;;
 esac
 shift # past argument or value
 done
@@ -64,6 +66,7 @@ if [ -z "$GENOME" ]
 then 
     GENOME=/mnt/users/fabig/Ssa_genome/CIG_3.6v2_chrom-NCBI/STAR_index
 fi
+
 # check if Genome file exists
 if [ ! -d "$GENOME" ]; then
    echo 'ERROR: File' $GENOME 'Does not exist!'
@@ -77,6 +80,7 @@ if [ -z "$GTF" ]
 then 
     GTF=/mnt/users/fabig/Ssa_genome/CIG_3.6v2_chrom-NCBI/GTF/Salmon_3p6_Chr_070715_All.filter.gtf
 fi
+
 # check if GTF file exists
 if [ ! -f "$GTF" ]; then
     echo 'ERROR: File' $GTF 'Does not exist!'
@@ -85,10 +89,12 @@ else
     echo 'FOUND: File' $GTF 
 fi
 
-if [ -f "$SHEET" ]; then
-    echo 'FOUND: File' $SHEET
-fi
 
+# Default set Stranded otion (only used for HtSeq)
+if [ -z "$STRANDED" ] 
+then 
+    STRANDED=reverse
+fi
 
 #-------------------------------------------------------------------------------
 # Checks for common folder copy
@@ -118,19 +124,14 @@ fi
 
 
 #-------------------------------------------------------------------------------
-# If an Illumina SampleSheet is provided parse it
-if [ -n "$SHEET" ]
-then 
-    python /mnt/users/fabig/cluster_pipelines/RnaMapping/helper_scripts/SampleSheetParser.py -s $SHEET -o $MASTER
+# Check line terminators in MASTER
+if cat -v $MASTER | grep -q '\^M' 
+then
+    echo 'Converting line terminators'
+    sed 's/\r/\n/g' $MASTER > sheet.tmp
+    mv sheet.tmp $MASTER
 else
-    if cat -v $MASTER | grep -q '\^M' 
-    then
-	 echo 'Converting line terminators'
-	 sed 's/\r/\n/g' $MASTER > sheet.tmp
-	 mv sheet.tmp $MASTER
-    else
-	echo 'Line terminators seem correct'
-    fi
+    echo 'Line terminators seem correct'
 fi
 
 #-------------------------------------------------------------------------------
@@ -174,6 +175,8 @@ echo '.gtf file'
 echo $GTF
 echo 'STAR command:'
 echo $STAR
+echo 'HtSeq option stranded:'
+echo $STRANDED
 echo '-----------------------'
 echo 'Number of samples= ' $END
 echo 'FIRST sample:' $(awk ' NR=='2' { print $1 $2 $3 $4 ; }' $MASTER)
@@ -309,7 +312,7 @@ INN=star/\$FILEBASE'Aligned.sortedByName.out.bam'
 OUT=count/\$FILEBASE'.count'
 
 samtools sort -n -o \$INN -T \$INN'.temp' -O bam \$INC
-samtools view \$INN | htseq-count -q -s reverse - $GTF > \$OUT
+samtools view \$INN | htseq-count -q -s $STRANDED - $GTF > \$OUT
 
 echo \$OUT "FINISHED"
 EOF
