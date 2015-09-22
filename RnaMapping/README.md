@@ -119,10 +119,10 @@ Given 3 samples:
 The _master sheet_ should look like this (WITH header):
 
 ---------|-----------|---------------|----------------|
-sample |	base |	adapter.id |	adapter.seq
+sample |	base |	adapter.id |	adapter.seq |
 0_1 |  0-1_S1_L001 |	A001   | ATCACG |
 CTR_1 |  CTR-1_S2_L001 | A002 | CGATGT	| 
-MA_1  | MA-1_S3_L001|  A003 |  TTAGGC |	 |
+MA_1  | MA-1_S3_L001|  A003 |  TTAGGC |	 
 
 ## _description file_ format guide
 
