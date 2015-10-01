@@ -55,6 +55,14 @@ case $key in
 	EXECUTE="$2"
 	shift # past argument
 	;;
+    --trimmer)        # OPTIONAL: cutadapt/trimmomatic
+	TRIMMER="$2"
+	shift # past argument
+	;;
+    -i|--annotattribute)        # Only used for testing; use --execute no
+	ANNOTATTRIBUTE="$2"
+	shift # past argument
+	;;
 esac
 shift # past argument or value
 done
@@ -95,6 +103,20 @@ if [ -z "$STRANDED" ]
 then 
     STRANDED=reverse
 fi
+
+# Default set trimmer to Cutadapt
+if [ -z "$TRIMMER" ] 
+then 
+    TRIMMER=cutadapt
+fi
+
+# Default set htseq-count IDATTR to "gene_id" (default for Ensembl) - NCBI uses "gene"
+if [ -z "$" ] 
+then 
+    ANNOTATTRIBUTE=gene_id
+fi
+
+
 
 #-------------------------------------------------------------------------------
 # Checks for common folder copy
@@ -195,7 +217,7 @@ mkdir -p {slurm,bash,fastq_trim,qc,star,count,mapp_summary}
 
 #-------------------------------------------------------------------------------
 #-------------------------------------------------------------------------------
-# PART 1: Quality trim the reads (ARRAY JOB)
+# PART 1a: Quality trim the reads, using cutadapt (ARRAY JOB)
 
 cat > bash/sbatch-trim.sh << EOF
 #!/bin/sh
@@ -226,6 +248,33 @@ cutadapt -q 20 -O 8 --minimum-length 40 -a \$adaptorR1 -A \$adaptorR2 -o \$O1 -p
 
 EOF
 
+# PART 1b: Quality trim the reads, using Trimmomatic (ARRAY JOB)
+
+cat > bash/sbatch-trimmomatic.sh << EOF
+#!/bin/sh
+#SBATCH --ntasks=2
+#SBATCH --array=1-$END
+#SBATCH --job-name=TRIMMER
+#SBATCH --output=slurm/trimmomatic-%A_%a.out
+  
+module load anaconda trimmomatic
+module list
+date
+  
+FILEBASE=\$(awk ' NR=='\$SLURM_ARRAY_TASK_ID+1' { print \$2 ; }' $MASTER)
+
+R1=$DIRIN'/'\$FILEBASE'_R1_001.fastq.gz'
+O1='fastq_trim/'\$FILEBASE'_R1_001.trim.fastq.gz'
+O1S='fastq_trim/'\$FILEBASE'_R1_001.trim.single.fastq.gz'
+R2=$DIRIN'/'\$FILEBASE'_R2_001.fastq.gz'
+O2='fastq_trim/'\$FILEBASE'_R2_001.trim.fastq.gz'
+O2S='fastq_trim/'\$FILEBASE'_R2_001.trim.single.fastq.gz'
+
+ADAPTERS=$(dirname $(which trimmomatic))/adapters/TruSeq3-PE-2.fa
+
+trimmomatic PE -threads 2 \${R1} \${R2} \${O1} \${O1S} \${O2} \${O2S} ILLUMINACLIP:\$ADAPTERS:2:30:10:8:true LEADING:3 SLIDINGWINDOW:20:20 MINLEN:40
+
+EOF
 
 #-------------------------------------------------------------------------------
 # PART 2: Quality control (ARRAY JOB)
@@ -269,6 +318,7 @@ date
 for TASK in {1..$END}
 do
 
+SAMPLE=\$(awk ' NR=='\$TASK+1' { print \$1 ; }' $MASTER)
 FILEBASE=\$(awk ' NR=='\$TASK+1' { print \$2 ; }' $MASTER)
 
 R1='fastq_trim/'\$FILEBASE'_R1_001.trim.fastq.gz'
@@ -284,7 +334,8 @@ $STAR --limitGenomeGenerateRAM 62000000000 \
 --outSAMmode Full \
 --outSAMtype BAM SortedByCoordinate \
 --runThreadN $CORES \
---readMatesLengthsIn NotEqual 
+--readMatesLengthsIn NotEqual \
+--outSAMattrRGline ID:$FILEBASE PL:illumina LB:$SAMPLE SM:$SAMPLE
 
 echo "FILE --> " \$OUT " PROCESSED"
  
@@ -312,7 +363,7 @@ INN=star/\$FILEBASE'Aligned.sortedByName.out.bam'
 OUT=count/\$FILEBASE'.count'
 
 samtools sort -n -o \$INN -T \$INN'.temp' -O bam \$INC
-samtools view \$INN | htseq-count -q -s $STRANDED - $GTF > \$OUT
+samtools view \$INN | htseq-count -i $ANNOTATTRIBUTE -q -s $STRANDED - $GTF > \$OUT
 
 echo \$OUT "FINISHED"
 EOF
@@ -388,7 +439,13 @@ then
 
     #-------------------------------------------------------------------------------
     # run sbatch file
-    command="sbatch bash/sbatch-trim.sh"
+	
+	if [ "$TRIMMER" == "cutadapt" ]
+	then
+ 	   command="sbatch bash/sbatch-trim.sh"
+    else
+	   command="sbatch bash/sbatch-trimmomatic.sh"
+    fi
     TrimJob=$($command | awk ' { print $4 }')
     for i in $(seq 1 $END)
     do 
