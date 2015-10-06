@@ -42,7 +42,7 @@ case $key in
 	;;
     --swiss) 
 	SWISS="$2"  # path to BLASTP DB
-	if [ -z "$MART"  ]; then
+	if [ -z "$SWISS"  ]; then
 	    echo 'ERROR: Need a SWISSPROTDB'
 	    exit 1
 	fi
@@ -170,10 +170,14 @@ cat > bash/ANN3-split.sh << EOF
 module load cigene-tools/1.0   
 
 fastasplit -f $FASTA -o ann-chunks -c $SPLIT
+
+echo 'All Good'
 EOF
 
 #------------------------------------------------------------------------
 # ERROR blast does not take the -db argument from variable
+# Set DBS variable outside EOF
+DBS="' "'"'$SWISS'" ''"ann-db/collection_all.fa"'" '"
 
 # BLASTP
 cat > bash/ANN4-blastp.sh << EOF 
@@ -189,22 +193,22 @@ SGE_TASK_ID=\$(expr \$SLURM_ARRAY_TASK_ID - 1)
 printf -v ID '%07g' \$SGE_TASK_ID              # will produce feks 0000001 (matches extension produced by fastasplit)
 
 CHUNK=ann-chunks/$RELFA'_chunk_'\$ID
-DBS="' "'"'$SWISS'" ''"ann-db/collection_all.fa"'" '"
 
 blastp -query \$CHUNK \
--db \$DBS \
+-db $DBS \
 -outfmt "6 std qlen slen nident" \
 -num_threads 2 \
 -evalue 1e-5 \
 -max_hsps_per_subject 1 \
 -max_target_seqs 20 \
 -out ann-hits/hits_chunk_\$ID
+
+echo 'All Good'
 EOF
 
 #------------------------------------------------------------------------
 # GENE NAMES
 
-#!/bin/sh
 cat > bash/ANN5-mart.sh << EOF 
 #!/bin/sh
 #SBATCH -n 1 # NB CPUS
@@ -220,7 +224,28 @@ SGE_TASK_ID=\$(expr \$SLURM_ARRAY_TASK_ID - 1)
 printf -v ID '%07g' \$SGE_TASK_ID 
 
 Rscript \$RSCR ann-hits/hits_chunk_\$ID ann-hits/hits_chunk_\$ID.names $DBFILE ${Marray[0]} ${Marray[1]} ${Marray[2]}
+
+echo 'All Good'
 EOF
+
+#-----------------------------------------------------------------------
+# SUMMARIZE
+
+cat > bash/ANN6-summary.sh << EOF 
+#!/bin/sh
+#SBATCH -n 1 # NB CPUS
+#SBATCH --job-name=ANN.sum
+#SBATCH --output=slurm/ANN_summary-%A.out
+
+module load R
+
+# join the files
+awk 'FNR==1 && NR!=1{next;}{print}' \$(ls ann-hits/*.names) > ann-hits/All_names.txt
+
+RSCR=/mnt/users/fabig/cluster_pipelines/TransDecoder/helper_scripts/sum-annot.R
+Rscript \$RSCR ann-hits/All_names.txt ann-hits/All_names.pdf
+EOF
+
 
 
 #===============================================================================
@@ -229,38 +254,43 @@ EOF
 if [ "$EXECUTE" != "no" ]
 then
 
-command="sbatch bash/ANN1-wget.sh"
-td1=$($command | awk ' { print $4 }')
-echo '1) Annotation: fetching proteoms' $td1
+    command="sbatch bash/ANN1-wget.sh"
+    td1=$($command | awk ' { print $4 }')
+    echo '1) Annotation: fetching proteoms' $td1
 
-#---
-command="sbatch --dependency=$td1 bash/ANN2-bdb.sh"  
-td2=$($command | awk ' { print $4 }')
-echo '2) Annotation: stting up DBs' $td2
+    #---
+    command="sbatch --dependency=$td1 bash/ANN2-bdb.sh"  
+    td2=$($command | awk ' { print $4 }')
+    echo '2) Annotation: stting up DBs' $td2
+    
+    #----
+    command="sbatch --dependency=afterok:$td2 bash/ANN3-split.sh"  
+    td3=$($command | awk ' { print $4 }')
+    echo '3) splitting files' $td3
 
-#----
-command="sbatch --dependency=afterok:$td2 bash/ANN3-split.sh"  
-td3=$($command | awk ' { print $4 }')
-echo '3) splitting files' $td3
+    #---
+    command="sbatch --dependency=afterok:$td3 bash/ANN4-blastp.sh"  
+    td4=$($command | awk ' { print $4 }')
+    echo '4) BLASTP submitted' $td4
 
-#---
-command="sbatch --dependency=afterok:$td2 bash/ANN4-blastp.sh"  
-td4=$($command | awk ' { print $4 }')
-echo '4) BLASTP submitted' $td4
+    #---
+    command="sbatch --dependency=afterok:$td3:$td4 bash/ANN5-mart.sh"  
+    td5=$($command | awk ' { print $4 }')
+    echo '5) Running biomaRt' $td5
 
-#---
-command="sbatch --dependency=afterok:$td3:$td4 bash/ANN5-mart.sh"  
-td5=$($command | awk ' { print $4 }')
-echo '5) Running biomaRt' $td5
+    #---
+    command="sbatch --dependency=afterok:$td5 bash/ANN6-summary.sh"  
+    td6=$($command | awk ' { print $4 }')
+    echo '5) Summarizing' $td6
 
-echo '=================='
-echo 'ALL SUBMITTED   :)'
-echo '=================='
+    echo '=================='
+    echo 'ALL SUBMITTED   :)'
+    echo '=================='
 
 else
 
-echo '==================='
-echo 'Nothing submitted:('
-echo '==================='
+    echo '==================='
+    echo 'Nothing submitted:('
+    echo '==================='
 
 fi
