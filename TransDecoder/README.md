@@ -1,6 +1,7 @@
 # TransDecoder_pipe.sh
 
-This is a pieline to run `TransDecoder` from the `Trinity` suite. The pipeline splits the BLAST and PFAM jobs automatically.
+This is a pieline to run `TransDecoder` from the `Trinity` suite. The
+pipeline splits the BLAST and PFAM jobs automatically.
 
 ## input
 Script expects:
@@ -63,28 +64,44 @@ bash $scr -f test_transcriptome.fa -s 8 -b $bdb -p $pdb
 Pipeline to find *gene names*  for genes.
 
 ## Input
-Script expects:
+Script arguments:
 
-1. A transcriptome `.fasta` file containing (predicted) protein
+- `-/--fasta`: A transcriptome `.fasta` file containing (predicted) protein
    sequences.
-2. Number of chunks to split into
-3. DB file see below
+- `-s/--split`: Number of chunks to split into
+- `-d/-db`: Input DB file (see below)
+- `--mart`: Specific arguments to BioMart. 3 Arguments seperated
+  by. Defaults to `plants_mart_28,description,external_gene_id`
+- `--swiss`: Path to the swissprot db.
+- `--execute`: If set to <no> all folders/scripts will be genearted,
+  but none of the jobs will be executed.
+  
 
 
-
-### Input file
+### Input DB file
 A `.tab` delimited file with a header (see below)
 
 Species | Proteome |  FTP  | Mart |  Prefix 
 ------|---------|----|----|------
-Arabidopsis.thaliana   | Arabidopsis_thaliana.TAIR10.28.pep.all.fa |
-ensembl FTP | athaliana_eg_gene | ATMG
+Arabidopsis.thaliana   | Arabidopsis_thaliana.TAIR10.28.pep.all.fa.gz | ensembl FTP | athaliana_eg_gene | ATMG
 
 - *Species*  `Arabidopsis.thaliana` (Species name, generic and
   specific name should be seperated by a `.` NO space! )
-- *Proteome* `Arabidopsis_thaliana.TAIR10.28.pep.all.fa` ()
+- *Proteome* `Arabidopsis_thaliana.TAIR10.28.pep.all.fa.gz` ()
 - *FTP*
-	`ftp://ftp.ensemblgenomes.org/pub/release-28/plants/fasta/arabidopsis_thaliana/pep/Arabidopsis_thaliana.TAIR10.28.pep.all.fa.gz`
+	`ftp://ftp.ensemblgenomes.org/pub/release-28/plants/fasta/arabidopsis_thaliana/pep/`
 	(For ensembl proteoms the list can be found at `http://www.ensembl.org/info/data/ftp/index.html`)
 - *Mart* `athaliana_eg_gene`
 - *Prefix* `ATMG` 
+
+### Example
+
+```sh
+fasta=Test_Protein.fasta
+db=Ann-DBs.txt
+swiss=/mnt/NOBACKUP/db/swissport/swissprot
+
+script=~/cluster_pipelines/TransDecoder/Annotation_pipe.sh
+
+bash $script -f $fasta -s 5 -d $db --mart plants_mart_28,description,external_gene_id --swiss $swiss --execute no
+```
