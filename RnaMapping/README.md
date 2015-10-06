@@ -56,9 +56,6 @@ packages installed in your `orion R`
 is located at:
 `/mnt/users/fabig/Ssa_genome/CIG_3.6v2_chrom-NCBI/GTF/Salmon_3p6_Chr_070715_All.filter.gtf`
 
-- `-s|--samplesheet`:  *Optional*  Full path to the Illumina _sample
-  sheet_ (.`.csv` format). 
-
 - `-m|--mastersheet`: *Required* Name of the _master sheet_, this will be created
   in the current directory and contains all relevant sample
   information. Information is extracted from the _sample sheet_ and
@@ -66,19 +63,24 @@ is located at:
   is empty then `-m|--mastersheet` needs to point to a _master sheet_
   file (see _master sheet_ format guide)
 
-- `-r|--read`: *Optional* Specify short/long depending on if the reads are longer
-  than 2x250bp. Defaults to short.
+- `-r|--read`: *Optional*  <short/long> depending on if the reads are longer
+  than 2x250bp. Defaults to <short>.
 
+- `--stranded`:*Optional*  <yes/no/reverse> Options passed on to
+  `htseq-count` script. Defaults to <reverse> (for illumina stranded
+  data); see
+  [HtSeq](http://www-huber.embl.de/users/anders/HTSeq/doc/count.html).
+  
 - `--copy`: *Required* Name of the common folder where a copy of
   - count
   - mapping_summary
   - mastersheet
-  will be placed. When set to `no` nothing will be copied
+  will be placed. When set to <no> nothing will be copied
 
 - `--desc`: *Required* Short description file giving the basic informations about
   the experiment ( see _description file_ format guid ). 
 
-- `--execute`: If set to `no` all folders/scripts will be genearted,
+- `--execute`: If set to <no> all folders/scripts will be genearted,
   but none of the jobs will be executed. 
 
 ---
@@ -117,10 +119,10 @@ Given 3 samples:
 The _master sheet_ should look like this (WITH header):
 
 ---------|-----------|---------------|----------------|
-sample |	base |	adapter.id |	adapter.seq
+sample |	base |	adapter.id |	adapter.seq |
 0_1 |  0-1_S1_L001 |	A001   | ATCACG |
 CTR_1 |  CTR-1_S2_L001 | A002 | CGATGT	| 
-MA_1  | MA-1_S3_L001|  A003 |  TTAGGC |	 |
+MA_1  | MA-1_S3_L001|  A003 |  TTAGGC |	 
 
 ## _description file_ format guide
 
