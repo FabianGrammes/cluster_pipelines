@@ -5,8 +5,6 @@ date
 
 # sh script_test.sh -d -s -m
 
-SCRIPTPATH
-
 #-------------------------------------------------------------------------------
 # Read script arguments and check if files/dirs exist
 
@@ -270,7 +268,7 @@ R2=$DIRIN'/'\$FILEBASE'_R2_001.fastq.gz'
 O2='fastq_trim/'\$FILEBASE'_R2_001.trim.fastq.gz'
 O2S='fastq_trim/'\$FILEBASE'_R2_001.trim.single.fastq.gz'
 
-ADAPTERS=$(dirname $(which trimmomatic))/adapters/TruSeq3-PE-2.fa
+ADAPTERS=\$(dirname \$(which trimmomatic))/adapters/TruSeq3-PE-2.fa
 
 trimmomatic PE -threads 2 \${R1} \${R2} \${O1} \${O1S} \${O2} \${O2S} ILLUMINACLIP:\$ADAPTERS:2:30:10:8:true LEADING:3 SLIDINGWINDOW:20:20 MINLEN:40
 
