@@ -75,15 +75,25 @@ Script arguments:
 - `--swiss`: Path to the swissprot db.
 - `--execute`: If set to <no> all folders/scripts will be genearted,
   but none of the jobs will be executed.
-  
+
+
+## Requirments
+
+In order for all subscripts to work the following `R` packages have to
+be installed in your R environment:
+
+- `bioconductor`
+- `biomaRt`
+- `plyr`
 
 
 ### Input DB file
-A `.tab` delimited file with a header (see below)
+A `.tab` delimited file with a header (see below), *important* keep
+a file header with lower case column names as in the example below. 
 
-Species | Proteome |  FTP  | Mart |  Prefix 
+species | proteome |  ftp  | mart |  prefix 
 ------|---------|----|----|------
-Arabidopsis.thaliana   | Arabidopsis_thaliana.TAIR10.28.pep.all.fa.gz | ensembl FTP | athaliana_eg_gene | ATMG
+Arabidopsis.thaliana   | Arabidopsis_thaliana.TAIR10.28.pep.all.fa.gz | ensembl FTP | athaliana_eg_gene | ATH
 
 - *Species*  `Arabidopsis.thaliana` (Species name, generic and
   specific name should be seperated by a `.` NO space! )
@@ -92,7 +102,8 @@ Arabidopsis.thaliana   | Arabidopsis_thaliana.TAIR10.28.pep.all.fa.gz | ensembl 
 	`ftp://ftp.ensemblgenomes.org/pub/release-28/plants/fasta/arabidopsis_thaliana/pep/`
 	(For ensembl proteoms the list can be found at `http://www.ensembl.org/info/data/ftp/index.html`)
 - *Mart* `athaliana_eg_gene`
-- *Prefix* `ATMG` 
+- *Prefix* choose a *three* capital letter, unique identifyer for the species. Do
+  NEVER use *gi* since this is reserved for swissprot. 
 
 ### Example
 

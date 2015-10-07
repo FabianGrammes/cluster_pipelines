@@ -99,7 +99,7 @@ echo 'LAST proteome:' $(awk ' NR=='$END+1' { print $1 ; }' $DBFILE)
 echo '--------------------------------------------------------------------------'
 
 # CREATE FOLDER STRUCTURE
-mkdir -p {ann-db,ann-chunks,ann-hits,bash,slurm}
+mkdir -p {ann-db,ann-db-clean,ann-chunks,ann-hits,bash,slurm}
 
 #------------------------------------------------------------------------
 # DOWNLOAD ensembl information
@@ -110,6 +110,8 @@ cat > bash/ANN1-wget.sh << EOF
 #SBATCH --job-name=ANN.wget:XofX
 #SBATCH -n 1
 #SBATCH --output=slurm/ANN_wget-%A.out
+
+module load anaconda
 
 # wget
 for N in {2..$END}
@@ -136,6 +138,18 @@ done
 
 cd ..
 
+# add .fa id prefix
+
+pyscr=/mnt/users/fabig/cluster_pipelines/TransDecoder/helper_scripts/name_fasta.py
+
+for N in {2..$END}
+do 
+  FA=\$(awk 'NR=='\$N' {print \$2}' $DBFILE)
+  FA=\${FA%.*}
+  PREF=\$(awk 'NR=='\$N' {print \$5}' $DBFILE)
+  python \$pyscr -i ann-db/\$FA -o ann-db-clean/\$FA -p \$PREF
+done
+
 EOF
 
 #------------------------------------------------------------------------
@@ -149,7 +163,7 @@ cat > bash/ANN2-bdb.sh << EOF
 
 module load blast+/2.2.28   
     
-cd ann-db
+cd ann-db-clean
 
 cat \$(ls *.fa) >> collection_all.fa
 
@@ -177,7 +191,7 @@ EOF
 #------------------------------------------------------------------------
 # ERROR blast does not take the -db argument from variable
 # Set DBS variable outside EOF
-DBS="' "'"'$SWISS'" ''"ann-db/collection_all.fa"'" '"
+DBS="' "'"'$SWISS'" ''"ann-db-clean/collection_all.fa"'" '"
 
 # BLASTP
 cat > bash/ANN4-blastp.sh << EOF 

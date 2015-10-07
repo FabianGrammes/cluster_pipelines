@@ -28,8 +28,9 @@ ens.inf <- read.table(dat.file, header = TRUE, sep ='\t',stringsAsFactors = FALS
 ens.inf <- rbind(ens.inf, c(NA,NA,NA, 'swiss','gi' ))
 
 ident.db <- function(x){
-    ri = which(sapply(ens.inf$prefix, function(y) grepl(paste('^',y, sep =''), x),
-        USE.NAMES = FALSE))
+    ri <- which(sapply(ens.inf$prefix, function(y) grepl(paste('^',y,'\\|',sep =''), x),
+                       USE.NAMES = FALSE)
+                )
     return(ens.inf[ri,'mart'])
 }
 
@@ -43,7 +44,7 @@ if( any(dat$db == "character(0)")){
 #-------------------------------------------------------------------------------
 # fun to correct the uniprot protein ids
 parse.id <- function(x){
-    if(grepl('^gi',x)){
+    if(grepl('^gi\\|',x)){
         x <- unlist(strsplit(x, split = '\\|' ))
         if( length(x) == 3 ){
             out <- x[2] 
@@ -53,7 +54,8 @@ parse.id <- function(x){
         }        
         return( out )
     }else{
-        return(x)
+        x <- unlist(strsplit(x, split = '\\|' ))
+        return(x[2])
     }
 }
 
