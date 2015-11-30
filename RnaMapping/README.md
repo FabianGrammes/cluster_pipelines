@@ -56,12 +56,8 @@ packages installed in your `orion R`
 is located at:
 `/mnt/users/fabig/Ssa_genome/CIG_3.6v2_chrom-NCBI/GTF/Salmon_3p6_Chr_070715_All.filter.gtf`
 
-- `-m|--mastersheet`: *Required* Name of the _master sheet_, this will be created
-  in the current directory and contains all relevant sample
-  information. Information is extracted from the _sample sheet_ and
-  arranged in a more user friendly way. If argument `-s|--samplesheet`
-  is empty then `-m|--mastersheet` needs to point to a _master sheet_
-  file (see _master sheet_ format guide)
+- `-m|--mastersheet`: *Required*  needs to point to a _master sheet_
+  file (see [ _master sheet_ format guide])
 
 - `-r|--read`: *Optional*  `<short/long>` Options passed on to STAR.
   Use <long> if the reads are longer than 2x250bp. Defaults to `<short>`.
@@ -80,7 +76,7 @@ is located at:
   will be placed. When set to `<no>`, nothing will be copied
 
 - `--desc`: *Required* Short description file giving the basic informations about
-  the experiment ( see _description file_ format guid ). **NOTE** If you
+  the experiment ( see [format guide](## _description file_ format guid)). **NOTE** If you
   use the `--copy no` then you do *NOT* need to provide file here. 
 
 - `--execute`: If set to `<no>` all folders/scripts will be genearted,
