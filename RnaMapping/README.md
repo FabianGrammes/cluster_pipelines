@@ -63,27 +63,27 @@ is located at:
   is empty then `-m|--mastersheet` needs to point to a _master sheet_
   file (see _master sheet_ format guide)
 
-- `-r|--read`: *Optional*  <short/long> Options passed on to STAR.
-  Use <long> if the reads are longer than 2x250bp. Defaults to <short>.
+- `-r|--read`: *Optional*  `<short/long>` Options passed on to STAR.
+  Use <long> if the reads are longer than 2x250bp. Defaults to `<short>`.
 
-- `--stranded`:*Optional*  <yes/no/reverse> Options passed on to
-  `htseq-count` script. Defaults to <reverse> (for illumina stranded
+- `--stranded`:*Optional*  `<yes/no/reverse>` Options passed on to
+  `htseq-count` script. Defaults to `<reverse>` (for illumina stranded
   data); see
   [HtSeq](http://www-huber.embl.de/users/anders/HTSeq/doc/count.html).
 
-- `--trimmer`: *Optional*  <cutadapt/trimmomatic>; Defaults to <cutadapt>
+- `--trimmer`: *Optional*  `<cutadapt/trimmomatic>`; Defaults to `<cutadapt>`
 
 - `--copy`: *Required* Name of the common folder where a copy of
   - count
   - mapping_summary
   - mastersheet
-  will be placed. When set to <no> nothing will be copied
+  will be placed. When set to `<no>`, nothing will be copied
 
 - `--desc`: *Required* Short description file giving the basic informations about
-  the experiment ( see _description file_ format guid ). *NOTE* If you
+  the experiment ( see _description file_ format guid ). **NOTE** If you
   use the `--copy no` then you do *NOT* need to provide file here. 
 
-- `--execute`: If set to <no> all folders/scripts will be genearted,
+- `--execute`: If set to `<no>` all folders/scripts will be genearted,
   but none of the jobs will be executed. 
 
 ---
@@ -132,6 +132,7 @@ MA_1  | MA-1_S3_L001|  A003 |  TTAGGC
 ## _description file_ format guide
 
 The following information should be contained in the description file:
+
 1. Organism
 2. Tissue
 3. Date, contact person
