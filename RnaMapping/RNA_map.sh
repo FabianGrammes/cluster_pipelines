@@ -5,7 +5,6 @@ date
 
 # sh script_test.sh -d -s -m
 
-SCRIPTPATH
 
 #-------------------------------------------------------------------------------
 # Read script arguments and check if files/dirs exist
@@ -16,13 +15,13 @@ key="$1"
 
 case $key in
     -d|--dirin)  # .fastq path
-    DIRIN="$2"
-    if [ ! -d "$DIRIN" ]; then
-	echo 'ERROR: Directory' $DIRIN 'Does not exist!'
-	exit 1
-    fi
-    shift # past argument
-    ;;
+	DIRIN="$2"
+	if [ ! -d "$DIRIN" ]; then
+	    echo 'ERROR: Directory' $DIRIN 'Does not exist!'
+	    exit 1
+	fi
+	shift # past argument
+	;;
     -g|--genome)      # OPTIONAL: path to genome
 	GENOME="$2"
 	shift # past argument
@@ -44,7 +43,7 @@ case $key in
 	shift # past argument
 	;;
     --copy) 
-	CCOPY="$2"
+	CPFOLDER="$2"
 	shift # past argument
 	;;
     --desc) 
@@ -66,6 +65,7 @@ case $key in
 esac
 shift # past argument or value
 done
+
 
 #-------------------------------------------------------------------------------
 echo '--------------------------------------------------------------------------'
@@ -111,7 +111,7 @@ then
 fi
 
 # Default set htseq-count IDATTR to "gene_id" (default for Ensembl) - NCBI uses "gene"
-if [ -z "$" ] 
+if [ -z "$ANNOTATTRIBUTE" ] 
 then 
     ANNOTATTRIBUTE=gene_id
 fi
@@ -123,10 +123,10 @@ fi
 
 COMMON=/mnt/SALMON-SEQDATA/CIGENE-DATA/GENE-EXPRESSION
 
-if [ "$CCOPY" != "no" -a -n "$CCOPY" ]; then
+if [ "$CPFOLDER" != "no" -a -n "$CPFOLDER" ]; then
     # 1st check if the folder already exists
-    if [ -d $COMMON/$CCOPY ]; then
-	echo 'ERROR! Folder: ' $COMMON/$CCOPY ' already exists!'
+    if [ -d $COMMON/$CPFOLDER ]; then
+	echo 'ERROR! Folder: ' $COMMON/$CPFOLDER ' already exists!'
         echo 'Please pick a different name'
 	exit 1
     # 2nd check for description file
@@ -137,11 +137,11 @@ if [ "$CCOPY" != "no" -a -n "$CCOPY" ]; then
 	    exit 1
 	fi
     fi 
-else 
-    if [ -z "$CCOPY" ]; then
-	echo 'ERROR! You have to provide a folder name!'
-	exit 1
-    fi
+elif [ ! -z "$CPFOLDER" ]; then
+    echo 'ERROR! You have to provide a folder name!'
+    exit 1
+elif [ "$CPFOLDER" == "no" ]; then
+    echo 'Results are NOT copied to common folder'
 fi
 
 
@@ -205,7 +205,7 @@ echo 'FIRST sample:' $(awk ' NR=='2' { print $1 $2 $3 $4 ; }' $MASTER)
 echo 'LAST sample:' $(awk ' NR=='$END+1' { print $1 $2 $3 $4 ; }' $MASTER)
 echo '-----------------------'
 echo 'Copy to common foder:'
-echo $COMMON/$CCOPY
+echo $COMMON/$CPFOLDER
 echo '++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++'
 
 # Create the folder tree if it does not exist
@@ -270,7 +270,7 @@ R2=$DIRIN'/'\$FILEBASE'_R2_001.fastq.gz'
 O2='fastq_trim/'\$FILEBASE'_R2_001.trim.fastq.gz'
 O2S='fastq_trim/'\$FILEBASE'_R2_001.trim.single.fastq.gz'
 
-ADAPTERS=$(dirname $(which trimmomatic))/adapters/TruSeq3-PE-2.fa
+ADAPTERS=\$(dirname \$(which trimmomatic))/adapters/TruSeq3-PE-2.fa
 
 trimmomatic PE -threads 2 \${R1} \${R2} \${O1} \${O1S} \${O2} \${O2S} ILLUMINACLIP:\$ADAPTERS:2:30:10:8:true LEADING:3 SLIDINGWINDOW:20:20 MINLEN:40
 
@@ -335,7 +335,7 @@ $STAR --limitGenomeGenerateRAM 62000000000 \
 --outSAMtype BAM SortedByCoordinate \
 --runThreadN $CORES \
 --readMatesLengthsIn NotEqual \
---outSAMattrRGline ID:$FILEBASE PL:illumina LB:$SAMPLE SM:$SAMPLE
+--outSAMattrRGline ID:\$FILEBASE PL:illumina LB:\$SAMPLE SM:\$SAMPLE
 
 echo "FILE --> " \$OUT " PROCESSED"
  
@@ -418,13 +418,13 @@ cat > bash/sbatch-copy.sh << EOF
 module list
 date
 
-mkdir $COMMON/$CCOPY/counts
-mkdir $COMMON/$CCOPY/mapp_summary
+mkdir $COMMON/$CPFOLDER/counts
+mkdir $COMMON/$CPFOLDER/mapp_summary
 
-cp counts/* $COMMON/$CCOPY/counts/
-cp mapp_summary/* $COMMON/$CCOPY/mapp_summary/
-cp $MASTER $COMMON/$CCOPY/
-cp $DESC $COMMON/$CCOPY/
+cp counts/* $COMMON/$CPFOLDER/counts/
+cp mapp_summary/* $COMMON/$CPFOLDER/mapp_summary/
+cp $MASTER $COMMON/$CPFOLDER/
+cp $DESC $COMMON/$CPFOLDER/
 
 EOF
 
@@ -440,9 +440,9 @@ then
     #-------------------------------------------------------------------------------
     # run sbatch file
 	
-	if [ "$TRIMMER" == "cutadapt" ]
-	then
- 	   command="sbatch bash/sbatch-trim.sh"
+    if [ "$TRIMMER" == "cutadapt" ]
+    then
+ 	command="sbatch bash/sbatch-trim.sh"
     else
 	   command="sbatch bash/sbatch-trimmomatic.sh"
     fi
@@ -514,7 +514,7 @@ then
 
     # COPY files to common dierectory
     
-    if [ "$CCOPY" != "no" -a -n "$CCOPY" ]; then
+    if [ "$CPFOLDER" != "no" -a -n "$CPFOLDER" ]; then
 	command="sbatch --dependency=afterok:$HtseqJobArray bash/sbatch-copy.sh"
 	CopyJob=$($command | awk ' { print $4 }')
 	echo '---------------'
