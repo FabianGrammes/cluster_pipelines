@@ -238,7 +238,7 @@ R2=$DIRIN'/'\$FILEBASE'_R2_001.fastq.gz'
 O2='fastq_trim/'\$FILEBASE'_R2_001.trim.fastq.gz'
 
 #------READ1---------------------
-adaptorR1=\$(awk ' NR=='\$SLURM_ARRAY_TASK_ID' { print \$4 ; }' $MASTER)
+adaptorR1=\$(awk ' NR=='\$SLURM_ARRAY_TASK_ID+1' { print \$4 ; }' $MASTER)
 adaptorR1='GATCGGAAGAGCACACGTCTGAACTCCAGTCAC'\$adaptorR1'ATCTCGTATGCCGTCTTCTGCTTG'
 
 #------READ2---------------------
