@@ -1,10 +1,12 @@
 #!/bin/bash
-module load anaconda
-module list 
-date
+
+#module load anaconda
+#module list
+echo ''
+echo $(date)
+echo 'RNAmap.sh Version 1.0'
 
 # sh script_test.sh -d -s -m
-
 
 #-------------------------------------------------------------------------------
 # Read script arguments and check if files/dirs exist
@@ -17,7 +19,7 @@ case $key in
     -d|--dirin)  # .fastq path
 	DIRIN="$2"
 	if [ ! -d "$DIRIN" ]; then
-	    echo 'ERROR: Directory' $DIRIN 'Does not exist!'
+	    echo 'ERROR 1: Directory' $DIRIN 'Does not exist!'
 	    exit 1
 	fi
 	shift # past argument
@@ -69,34 +71,22 @@ done
 
 #-------------------------------------------------------------------------------
 echo '--------------------------------------------------------------------------'
-# Default set to Genome: 
-if [ -z "$GENOME" ] 
-then 
-    GENOME=/mnt/users/fabig/Ssa_genome/CIG_3.6v2_chrom-NCBI/STAR_index
-fi
 
 # check if Genome file exists
-if [ ! -d "$GENOME" ]; then
-   echo 'ERROR: File' $GENOME 'Does not exist!'
-   exit 1
-else 
+if [ -d "$GENOME" ]; then
     echo 'FOUND: File' $GENOME
-fi
-
-# Default set to GTF: 
-if [ -z "$GTF" ] 
-then 
-    GTF=/mnt/users/fabig/Ssa_genome/CIG_3.6v2_chrom-NCBI/GTF/Salmon_3p6_Chr_070715_All.filter.gtf
+else
+    echo 'ERROR 2: File' $GENOME 'Does not exist!'
+    exit 1
 fi
 
 # check if GTF file exists
 if [ ! -f "$GTF" ]; then
-    echo 'ERROR: File' $GTF 'Does not exist!'
+    echo 'ERROR 3: File' $GTF 'Does not exist!'
     exit 1
 else 
     echo 'FOUND: File' $GTF 
 fi
-
 
 # Default set Stranded otion (only used for HtSeq)
 if [ -z "$STRANDED" ] 
@@ -116,30 +106,27 @@ then
     ANNOTATTRIBUTE=gene_id
 fi
 
-
-
 #-------------------------------------------------------------------------------
 # Checks for common folder copy
 
 COMMON=/mnt/SALMON-SEQDATA/CIGENE-DATA/GENE-EXPRESSION
 
-if [ "$CPFOLDER" != "no" -a -n "$CPFOLDER" ]; then
+
+if [ -z "$CPFOLDER" ]; then
+    echo 'ERROR 4: You have to provide a folder name, or type "no"'
+    exit 1
+elif [ "$CPFOLDER" != "no" ]; then
     # 1st check if the folder already exists
     if [ -d $COMMON/$CPFOLDER ]; then
-	echo 'ERROR! Folder: ' $COMMON/$CPFOLDER ' already exists!'
+	echo 'ERROR 5 Folder: ' $COMMON/$CPFOLDER ' already exists!'
         echo 'Please pick a different name'
 	exit 1
     # 2nd check for description file
-    else
-	if [ ! -f "$DESC" ]; then
-	    echo 'ERROR: Can not find the description file!'
-	    echo 'You need to provide a short description file.'
-	    exit 1
-	fi
+    elif [ ! -f "$DESC" ]; then
+	echo 'ERROR 6: Can not find the description file!'
+	echo 'You need to provide a short description file.'
+	exit 1
     fi 
-elif [ ! -z "$CPFOLDER" ]; then
-    echo 'ERROR! You have to provide a folder name!'
-    exit 1
 elif [ "$CPFOLDER" == "no" ]; then
     echo 'Results are NOT copied to common folder'
 fi
@@ -155,6 +142,8 @@ then
 else
     echo 'Line terminators seem correct'
 fi
+
+
 
 #-------------------------------------------------------------------------------
 # Arguments for STAR
@@ -186,6 +175,7 @@ esac
 
 
 # echo all input variables
+echo ''
 echo '++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++'
 echo 'Input arguments:'
 echo '-----------------------'
@@ -200,16 +190,21 @@ echo $STAR
 echo 'HtSeq option stranded:'
 echo $STRANDED
 echo '-----------------------'
+echo 'Indexes:'
+echo $IDX
 echo 'Number of samples= ' $END
-echo 'FIRST sample:' $(awk ' NR=='2' { print $1 $2 $3 $4 ; }' $MASTER)
-echo 'LAST sample:' $(awk ' NR=='$END+1' { print $1 $2 $3 $4 ; }' $MASTER)
-echo '-----------------------'
-echo 'Copy to common foder:'
-echo $COMMON/$CPFOLDER
+echo 'FIRST sample:' $(awk ' NR=='2' {OFS="\t"; print; }' $MASTER)
+echo 'LAST sample:' $(awk ' NR=='$END+1' {OFS="\t"; print; }' $MASTER)
+if [ "$CPFOLDER" != "no" ]; then
+    echo '-----------------------'
+    echo 'Copy to common foder:'
+    echo $COMMON/$CPFOLDER
+fi
+echo ''
 echo '++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++'
 
 # Create the folder tree if it does not exist
-mkdir -p {slurm,bash,fastq_trim,qc,star,count,mapp_summary}
+mkdir -p {slurm,bash,fastq_trim,qc,qc_trim,star,count,mapp_summary}
 
 #===============================================================================
 
@@ -237,14 +232,7 @@ O1='fastq_trim/'\$FILEBASE'_R1_001.trim.fastq.gz'
 R2=$DIRIN'/'\$FILEBASE'_R2_001.fastq.gz'
 O2='fastq_trim/'\$FILEBASE'_R2_001.trim.fastq.gz'
 
-#------READ1---------------------
-adaptorR1=\$(awk ' NR=='\$SLURM_ARRAY_TASK_ID+1' { print \$4 ; }' $MASTER)
-adaptorR1='GATCGGAAGAGCACACGTCTGAACTCCAGTCAC'\$adaptorR1'ATCTCGTATGCCGTCTTCTGCTTG'
-
-#------READ2---------------------
-adaptorR2='AGATCGGAAGAGCGTCGTGTAGGGAAAGAGTGTAGATCTCGGTGGTCGCCGTATCATT'
-
-cutadapt -q 20 -O 8 --minimum-length 40 -a \$adaptorR1 -A \$adaptorR2 -o \$O1 -p \$O2 \$R1 \$R2
+cutadapt -q 20 -O 8 --minimum-length 40 -a AGATCGGAAGAGC -A AGATCGGAAGAGC -o \$O1 -p \$O2 \$R1 \$R2
 
 EOF
 
@@ -292,11 +280,17 @@ date
   
 FILEBASE=\$(awk ' NR=='\$SLURM_ARRAY_TASK_ID+1' { print \$2 ; }' $MASTER)
 
-R1='fastq_trim/'\$FILEBASE'_R1_001.trim.fastq.gz'
-R2='fastq_trim/'\$FILEBASE'_R2_001.trim.fastq.gz'
+R1=$DIRIN'/'\$FILEBASE'_R1_001.fastq.gz'
+R2=$DIRIN'/'\$FILEBASE'_R2_001.fastq.gz'
 
 fastqc -o qc \$R1
 fastqc -o qc \$R2
+
+TR1='fastq_trim/'\$FILEBASE'_R1_001.trim.fastq.gz'
+TR2='fastq_trim/'\$FILEBASE'_R2_001.trim.fastq.gz'
+
+fastqc -o qc_trim \$TR1
+fastqc -o qc_trim \$TR2
 
 EOF
 
@@ -388,7 +382,7 @@ cd ..
 EOF
 
 #-------------------------------------------------------------------------------
-# PART 7: HTSeq quality control
+# PART 7: HTSeq quality control and collect FastQC reports
 
 cat > bash/sbatch-htseq-check.sh << EOF
 #!/bin/bash
@@ -404,6 +398,11 @@ cd count
 R CMD BATCH /mnt/users/fabig/cluster_pipelines/RnaMapping/helper_scripts/HTseq_plot.R
 cd ..
 
+# collect FastQC reports for trimmed reads
+Rscript /mnt/users/fabig/cluster_pipelines/RnaMapping/helper_scripts/collect_fastqc.R qc_trim mapp_summary/fastqc_trimmed.pdf
+
+# collect FastQC reports for raw reads
+Rscript /mnt/users/fabig/cluster_pipelines/RnaMapping/helper_scripts/collect_fastqc.R qc mapp_summary/fastqc.pdf
 EOF
 
 #-------------------------------------------------------------------------------
