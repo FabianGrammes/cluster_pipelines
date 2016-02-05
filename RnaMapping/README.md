@@ -1,15 +1,3 @@
-# RNA_map
-
-`RNA_map` is a bash script that automates the processes of:
-
-1. Trimming of adapter sequences and poor quality nucleotides
-   (cutadapt); Removing read pairs where one of the reads has less than 40bp 
-2. Quality Control (FastQC)
-3. Mapping reads to the genome (STAR)
-4. Read counting per gene (HTSeq)
-5. Summary statistics
-6. Copy to common folder
-
 Table of Contents
 =================
 
@@ -27,6 +15,18 @@ Table of Contents
     * [Version 1.0](#version-10)
 
 Created by [gh-md-toc](https://github.com/ekalinin/github-markdown-toc)
+
+# RNA_map
+
+`RNA_map` is a bash script that automates the processes of:
+
+1. Trimming of adapter sequences and poor quality nucleotides
+   (cutadapt); Removing read pairs where one of the reads has less than 40bp 
+2. Quality Control (FastQC)
+3. Mapping reads to the genome (STAR)
+4. Read counting per gene (HTSeq)
+5. Summary statistics
+6. Copy to common folder
 
 The script currently works only if the following conditions are met
 (possible to extend the script for other settings):
