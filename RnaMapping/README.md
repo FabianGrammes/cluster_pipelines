@@ -119,13 +119,44 @@ or dual index.
 ### TruSeq adaptors
 
 Plain tab delimited text file, no quotes, include header. *Important*
-writing your _master sheet_ in excel works.
+writing your _master sheet_ in excel works. If you have several .fastq
+files per Sample, say comming from sequerncing the same sample on
+different HiSeq lanes, The script will quality trim the .fastq files
+individual and then summarise them into one .bam file (and
+subsequently produce one .count file sample). In order for this to
+work all files belonging to same sample need to have the same base
+name: 
 
 Using single or dual adaptors (TruSeq) works. See
 [Illumina adaptor](https://www.med.unc.edu/pharm/calabreselab/files/tufts-sequencing-primer)
 for further information about TruSeq adaptors.
 
-Given 3 samples with single adators
+#### Example 1: Same sample different lanes
+
+- Sample 1; sequenced on Lane 1 and 3: Adaptor p7 = A001 (ATCACG)
+	- `0-1_S1_L001_R1.fastq.gz`
+	- `0-1_S1_L001_R2.fastq.gz`
+   	- `0-1_S1_L003_R1.fastq.gz`
+	- `0-1_S1_L003_R2.fastq.gz`
+- Sample 2; sequenced on Lane 2 and 5: Adaptor A002 (CGATGT)
+	- `CTR-1_S2_L002_R1.fastq.gz`
+	- `CTR-1_S2_L002_R2.fastq.gz`
+	- `CTR-1_S2_L005_R1.fastq.gz`
+	- `CTR-1_S2_L005_R2.fastq.gz`
+
+The _master sheet_ has to look like this (*WITH header*), Important it
+is NOT necessary to include adaptor information in the _master_sheet_;
+however it is good idea to do so anyway. **I recommend to use on column
+per adaptor**. 
+
+sample |	base 
+----|-----
+0_1 |  0-1_S1
+CTR_1 |  CTR-1
+
+#### Example 2: Single adaptors
+
+Given 3 samples with single adaptors
 
 - Sample 1: Adaptor p7 = A001 (ATCACG)
 	- `0-1_S1_L001_R1_001.fastq.gz`
@@ -167,3 +198,23 @@ The following information should be contained in the description file:
 2. Tissue
 3. Date, contact person
 4. 2-3 Sentences about goal/setup of the experiment
+
+# Changelog
+
+## Version 1.0.1
+
+- Accepts multiple .fastq files per Sample as input. Several .fastq
+  files will be summarised into one .bam file. All .fastq files need
+  to have the same file prefix. 
+  
+- *STAR*
+	- Not running as loop but now as array job with 5CPUs per task and
+      max 20 jobs in parallel.
+- *FASTQ*
+	- Added R script to summarise the FastQC reports. Both .pdf and .txt
+  
+## Version 1.0
+
+- Simplified the design of the master_sheet
+- Modified the cutadapt script to work with all kinds of Illumina
+  adators (single/dual adaptors). 

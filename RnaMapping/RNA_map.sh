@@ -4,7 +4,7 @@
 #module list
 echo ''
 echo $(date)
-echo 'RNAmap.sh Version 1.0'
+echo 'RNAmap.sh Version 1.0.1'
 
 # sh script_test.sh -d -s -m
 
@@ -60,7 +60,7 @@ case $key in
 	TRIMMER="$2"
 	shift # past argument
 	;;
-    -i|--annotattribute)        # Only used for testing; use --execute no
+    --annotattribute)        # Only used for testing; use --execute no
 	ANNOTATTRIBUTE="$2"
 	shift # past argument
 	;;
@@ -105,6 +105,7 @@ if [ -z "$ANNOTATTRIBUTE" ]
 then 
     ANNOTATTRIBUTE=gene_id
 fi
+
 
 #-------------------------------------------------------------------------------
 # Checks for common folder copy
@@ -152,11 +153,11 @@ fi
 END=$(sed '1d' $MASTER | wc -l) # skip hearder line
 
 
-# Calculation: how many cores to use for STAR, max 20
+# Calculation: how many cores to use for STAR, max 25
 CORES=$(($END * 3))
-if [ $CORES -gt 20 ]
+if [ $CORES -gt 25 ]
 then 
-    CORES=20
+    CORES=25
 fi
 
 case $READ in 
@@ -227,12 +228,20 @@ date
   
 FILEBASE=\$(awk ' NR=='\$SLURM_ARRAY_TASK_ID+1' { print \$2 ; }' $MASTER)
 
-R1=$DIRIN'/'\$FILEBASE'_R1_001.fastq.gz'
-O1='fastq_trim/'\$FILEBASE'_R1_001.trim.fastq.gz'
-R2=$DIRIN'/'\$FILEBASE'_R2_001.fastq.gz'
-O2='fastq_trim/'\$FILEBASE'_R2_001.trim.fastq.gz'
+R1A=( \$( ls $DIRIN'/'\$FILEBASE*_R1_*.fastq.gz ))
+R2A=( \$( ls $DIRIN'/'\$FILEBASE*_R2_*.fastq.gz ))
 
-cutadapt -q 20 -O 8 --minimum-length 40 -a AGATCGGAAGAGC -A AGATCGGAAGAGC -o \$O1 -p \$O2 \$R1 \$R2
+# Loop in parallel
+count=\${#R1A[@]}
+for i in \`seq 1 \$count\`
+do
+    R1=\${R1A[\$i-1]}
+    O1='fastq_trim/'\$(basename \$R1 | sed 's/.fastq.gz//')'.trim.fastq.gz'
+    R2=\${R2A[\$i-1]}
+    O2='fastq_trim/'\$(basename \$R2 | sed 's/.fastq.gz//')'.trim.fastq.gz'
+    echo "==>>" \$R1 \$R2
+    cutadapt -q 20 -O 8 --minimum-length 40 -a AGATCGGAAGAGC -A AGATCGGAAGAGC -o \$O1 -p \$O2 \$R1 \$R2
+done
 
 EOF
 
@@ -280,46 +289,66 @@ date
   
 FILEBASE=\$(awk ' NR=='\$SLURM_ARRAY_TASK_ID+1' { print \$2 ; }' $MASTER)
 
-R1=$DIRIN'/'\$FILEBASE'_R1_001.fastq.gz'
-R2=$DIRIN'/'\$FILEBASE'_R2_001.fastq.gz'
 
-fastqc -o qc \$R1
-fastqc -o qc \$R2
+R1A=( \$( ls $DIRIN'/'\$FILEBASE*_R1_*.fastq.gz ))
+R2A=( \$( ls $DIRIN'/'\$FILEBASE*_R2_*.fastq.gz ))
 
-TR1='fastq_trim/'\$FILEBASE'_R1_001.trim.fastq.gz'
-TR2='fastq_trim/'\$FILEBASE'_R2_001.trim.fastq.gz'
 
-fastqc -o qc_trim \$TR1
-fastqc -o qc_trim \$TR2
+# Loop in parallel
+count=\${#R1A[@]}
+for i in \`seq 1 \$count\`
+do
+    R1=\${R1A[\$i-1]}
+    R2=\${R2A[\$i-1]}
+    fastqc -o qc \$R1
+    fastqc -o qc \$R2
+done
+
+TR1A=( ls 'fastq_trim/'\$FILEBASE*_R1_*.trim.fastq.gz )
+TR2A=( ls 'fastq_trim/'\$FILEBASE*_R2_*.trim.fastq.gz )
+# Loop in parallel
+count=\${#TR1A[@]}
+for i in \`seq 1 \$count\`
+do
+    R1=\${TR1A[\$i-1]}
+    R2=\${TR2A[\$i-1]}
+    fastqc -o qc_trim \$R1
+    fastqc -o qc_trim \$R2
+done
 
 EOF
 
 #-------------------------------------------------------------------------------
-# PART 4: STAR (LOOP)
+# PART 4: STAR (Array)
 
 cat > bash/sbatch-star.sh << EOF
 #!/bin/bash
 #SBATCH --job-name=STAR
-#SBATCH -n $CORES
+#SBATCH -n 5
 #SBATCH -N 1
-#SBATCH --output=slurm/star-%j.out
+#SBATCH --array=1-$END%20
+#SBATCH --output=slurm/star-%A_%a.out
     
-
 module load star
 module list
 date
 
-for TASK in {1..$END}
-do
+SAMPLE=\$(awk ' NR=='\$SLURM_ARRAY_TASK_ID+1' { print \$1 ; }' $MASTER)
+FILEBASE=\$(awk ' NR=='\$SLURM_ARRAY_TASK_ID+1' { print \$2 ; }' $MASTER)
 
-SAMPLE=\$(awk ' NR=='\$TASK+1' { print \$1 ; }' $MASTER)
-FILEBASE=\$(awk ' NR=='\$TASK+1' { print \$2 ; }' $MASTER)
+R1A=( \$( ls 'fastq_trim/'\$FILEBASE*_R1_*.fastq.gz ))
+R2A=( \$( ls 'fastq_trim/'\$FILEBASE*_R2_*.fastq.gz ))
 
-R1='fastq_trim/'\$FILEBASE'_R1_001.trim.fastq.gz'
-R2='fastq_trim/'\$FILEBASE'_R2_001.trim.fastq.gz'
+R1=\$(printf ",%s" "\${R1A[@]}")
+R2=\$(printf ",%s" "\${R2A[@]}")
+R1=\${R1:1}
+R2=\${R2:1}
 
 OUT=star/\$FILEBASE
 
+echo "Running -->" $R1 $R2
+
+# Run STAR
 $STAR --limitGenomeGenerateRAM 62000000000 \
 --genomeDir $GENOME \
 --readFilesCommand zcat \
@@ -332,8 +361,6 @@ $STAR --limitGenomeGenerateRAM 62000000000 \
 --outSAMattrRGline ID:\$FILEBASE PL:illumina LB:\$SAMPLE SM:\$SAMPLE
 
 echo "FILE --> " \$OUT " PROCESSED"
- 
-done
 
 EOF
 
@@ -357,6 +384,9 @@ INN=star/\$FILEBASE'Aligned.sortedByName.out.bam'
 OUT=count/\$FILEBASE'.count'
 
 samtools sort -n -o \$INN -T \$INN'.temp' -O bam \$INC
+
+rm \$INC
+
 samtools view \$INN | htseq-count -i $ANNOTATTRIBUTE -q -s $STRANDED - $GTF > \$OUT
 
 echo \$OUT "FINISHED"

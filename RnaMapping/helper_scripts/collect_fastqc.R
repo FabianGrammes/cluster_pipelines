@@ -7,9 +7,10 @@ library(plyr)
 library(ggplot2)
 library(grid)
 library(gridExtra)
+library(stringr)
 
 qc.folder <- as.character(args[1])
-pdf.file <- args[2]
+out.file <- args[2]
 
 #===============================================================================
 # FastQC DATA READ FUNCTIONS
@@ -84,8 +85,9 @@ sep.reads <- function(x, phrase){
 
 # plot theme
 my.theme = theme_bw()+
-        theme(axis.text.x = element_text(angle= 90, vjust=0.5, hjust=1),
-              #legend.position ="none",
+        theme(axis.text.x = element_text(angle= 45, hjust=1, size = 5),
+                                        #legend.position ="none",
+              legend.text = element_text(size = 6 ),
               strip.text = element_text(vjust=0.5, hjust=0.5),
               plot.title = element_text(size=20, hjust=0.5))
 
@@ -96,6 +98,8 @@ gg.base <- function(base.stats, title){
     base.stats <- ldply(base.stats)
     base.stats$stats <- factor(base.stats$stats, levels = rev(f.ord))
     base.stats$summary <- factor(base.stats$summary, levels = c('pass','warn','fail'))
+    #base.stats$.id <- gsub(' ', '-', 
+    #                       str_wrap(gsub('_|-',' ',base.stats$.id), width = 15))
     # plot
     gg <- ggplot(base.stats)+aes(x = .id, y = stats, fill = summary)+
         geom_tile(colour = "white", lwd = 1)+
@@ -105,15 +109,12 @@ gg.base <- function(base.stats, title){
     return(gg)
 }
 
-# TEST FUN
-#gb <- gg.base(base.stats, 'Base')
-#print(gb)
-
-
 # 2) Line plot for the BASE.QUAL
 gg.qual <- function(seq.qual, title){
     title = paste(title, "Mean Base Quality")
     in.df2 <- cleanup(seq.qual)
+    in.df2$file <- gsub(' ', '-', 
+                       str_wrap(gsub('_|-',' ', in.df2$file), width = 25))
     # set up color background
     background <- data.frame(lower = c(0, 20, 28), 
                              upper = c(20, 28, 40),
@@ -133,23 +134,6 @@ gg.qual <- function(seq.qual, title){
     return(gg)
 }
 
-    
-# TEST FUN
-#gl <- gg.len(seq.len, 'Length')
-#print(gl)
-
-#Extract Legend 
-#g_legend<-function(a.gplot){ 
-#  tmp <- ggplot_gtable(ggplot_build(a.gplot)) 
-#  leg <- which(sapply(tmp$grobs, function(x) x$name) == "guide-box") 
-#  legend <- tmp$grobs[[leg]] 
-#  return(legend)
-#} 
-
-#legend <- g_legend(my_hist) 
-#grid.draw(legend) 
-
-
 #===============================================================================
 # RUN through the files
 
@@ -158,7 +142,7 @@ zips <- list.files(qc.folder, pattern ='.zip')
 # UNZIP only the summary file
 for(i in 1:length(zips)){
     zip.path <- file.path(qc.folder , zips[i])
-    cat(zip.path)
+    #cat(zip.path)
     unzip(zip.path,
           files = file.path(gsub('.zip', '', zips[i]),"fastqc_data.txt"),
           exdir = file.path(qc.folder, "tmp" ))  
@@ -170,7 +154,7 @@ lv <- vector('list', length(zips))
 names(lv) <- sapply(qcs, function(x) gsub('.trim_fastqc|_fastqc', '',
                                           unlist(strsplit(x, "/"))[3]))
 
-full.list <- list('base' =lv, 'qual' = lv, 'len' = lv )
+full.list <- list('base' =lv, 'qual' = lv, 'len' = lv, summ = lv )
 
 
 for(i in 1:length(qcs)){
@@ -179,6 +163,7 @@ for(i in 1:length(qcs)){
     conn <- file( file.conn, open = 'r' )
     linn <-readLines( conn )
     # read the base stats
+    full.list[['summ']][[i]] <- read.out(linn, '>>Basic Statistics', 'Value')
     full.list[['base']][[i]] <- read.base(linn)
     full.list[['qual']][[i]] <- read.out(linn, '>>Per base sequence quality', 'mean.qual')
     # close conn
@@ -198,7 +183,10 @@ gg.linkF <- function(gfun, gdat, title){
 }
 
 
-pdf(pdf.file, width = 20, height = 20)
+# set the plotting size according to the number of samples
+pdf(paste(out.file,".pdf", sep =""),
+    width = (13+ceiling(length(r1)/5)),
+    height = 20)
                                         # setup the grid
 
 grid.newpage()
@@ -236,6 +224,13 @@ upViewport()
     grid.roundrect(gp =gp)
     upViewport()
 dev.off()
+
+
+# Make the summary table
+f.txt <- ldply(full.list$summ)
+f.txt <- cast(f.txt, base ~ .id, value = "col.name")
+write.table(f.txt, file = paste(out.file,".txt", sep =""), sep = "\t", row.names = FALSE)
+
 
 # DELETE the tmp folder
 unlink( file.path(qc.folder, "tmp" ), recursive=TRUE)
