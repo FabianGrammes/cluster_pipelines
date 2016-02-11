@@ -1,3 +1,21 @@
+Table of Contents
+=================
+
+  * [RNA_map](#rna_map)
+    * [Example](#example)
+      * [Reports](#reports)
+    * [RNA_map options](#rna_map-options)
+    * [<em>master sheet</em> format guide](#master-sheet-format-guide)
+      * [TruSeq adaptors](#truseq-adaptors)
+        * [Example 1: Same sample different lanes](#example-1-same-sample-different-lanes)
+        * [Example 2: Single adaptors](#example-2-single-adaptors)
+    * [<em>description file</em> format guide](#description-file-format-guide)
+  * [Changelog](#changelog)
+    * [Version 1.0.1](#version-101)
+    * [Version 1.0](#version-10)
+
+Created by [gh-md-toc](https://github.com/ekalinin/github-markdown-toc)
+
 # RNA_map
 
 `RNA_map` is a bash script that automates the processes of:
