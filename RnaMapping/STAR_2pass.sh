@@ -6,7 +6,15 @@ IFS="|";
 
 ta=($test)
 
-for ((i=0; i<${#ta[@]}; ++i))
+
+# Join all SJ files
+for ((i=0; i<${#SJa[@]}; ++i))
     do
-echo ${ta[$i]}
+	SJdir=${SJa[$i]}
+	cat $SJdir/*SJ.out.tab >> star_2nd/SJ_all.tab
 done
+
+# Filter the joined file
+awk 'BEGIN {OFS="\t"; strChar[0]="."; strChar[1]="+"; strChar[2]="-";} {if($5>1){print $1,$2,$3,strChar[$4]}}' star_2nd/SJ_all.tab > SJ_in.tab
+
+echo '==>>FINISHED'

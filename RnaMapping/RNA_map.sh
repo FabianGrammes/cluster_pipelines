@@ -324,9 +324,10 @@ EOF
 cat > bash/sbatch-star.sh << EOF
 #!/bin/bash
 #SBATCH --job-name=STAR
-#SBATCH -n 5
+#SBATCH -n 20
 #SBATCH -N 1
-#SBATCH --array=1-$END%20
+#SBATCH --mem=60G
+#SBATCH --array=1-$END%5
 #SBATCH --output=slurm/star-%A_%a.out
     
 module load star
@@ -346,7 +347,7 @@ R2=\${R2:1}
 
 OUT=star/\$FILEBASE
 
-echo "Running -->" $R1 $R2
+echo "Running  --> " \$R1 \$R2
 
 # Run STAR
 $STAR --limitGenomeGenerateRAM 62000000000 \
@@ -355,14 +356,15 @@ $STAR --limitGenomeGenerateRAM 62000000000 \
 --readFilesIn \$R1 \$R2 \
 --outFileNamePrefix \$OUT \
 --outSAMmode Full \
---outSAMtype BAM SortedByCoordinate \
---runThreadN $CORES \
+--outSAMtype BAM Unsorted \
+--runThreadN 20 \
 --readMatesLengthsIn NotEqual \
 --outSAMattrRGline ID:\$FILEBASE PL:illumina LB:\$SAMPLE SM:\$SAMPLE
 
 echo "FILE --> " \$OUT " PROCESSED"
 
-EOF
+
+EOF\
 
 #-------------------------------------------------------------------------------
 # PART 5: HTSeq (ARRAY JOB)
@@ -379,7 +381,7 @@ module list
 date
 
 FILEBASE=\$(awk ' NR=='\$SLURM_ARRAY_TASK_ID+1' { print \$2 ; }' $MASTER)
-INC=star/\$FILEBASE'Aligned.sortedByCoord.out.bam'
+INC=star/\$FILEBASE'Aligned.out.bam'
 INN=star/\$FILEBASE'Aligned.sortedByName.out.bam'
 OUT=count/\$FILEBASE'.count'
 
@@ -429,10 +431,10 @@ R CMD BATCH /mnt/users/fabig/cluster_pipelines/RnaMapping/helper_scripts/HTseq_p
 cd ..
 
 # collect FastQC reports for trimmed reads
-Rscript /mnt/users/fabig/cluster_pipelines/RnaMapping/helper_scripts/collect_fastqc.R qc_trim mapp_summary/fastqc_trimmed.pdf
+Rscript /mnt/users/fabig/cluster_pipelines/RnaMapping/helper_scripts/collect_fastqc.R qc_trim mapp_summary/fastqc_trimmed
 
 # collect FastQC reports for raw reads
-Rscript /mnt/users/fabig/cluster_pipelines/RnaMapping/helper_scripts/collect_fastqc.R qc mapp_summary/fastqc.pdf
+Rscript /mnt/users/fabig/cluster_pipelines/RnaMapping/helper_scripts/collect_fastqc.R qc mapp_summary/fastqc
 EOF
 
 #-------------------------------------------------------------------------------
