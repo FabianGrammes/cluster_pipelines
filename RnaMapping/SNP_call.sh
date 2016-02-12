@@ -25,6 +25,10 @@ case $key in
 	GENDIR="$2"
 	shift # past argument
 	;;
+    --FaDir)      # .fastq path
+	FADIR="$2"
+	shift # past argument
+	;;
     --read)      # Read length
 	RLEN="$2"
 	shift # past argument
@@ -47,6 +51,57 @@ done
 
 # Create the folder tree if it does not exist
 mkdir -p {slurm,bash,star_2pass,star_genome,mapp_summary}
+
+#-------------------------------------------------------------------------------
+# Check line terminators in MASTER
+if cat -v $MASTER | grep -q '\^M' 
+then
+    echo 'Converting line terminators'
+    sed 's/\r/\n/g' $MASTER > sheet.tmp
+    mv sheet.tmp $MASTER
+else
+    echo 'Line terminators seem correct'
+fi
+
+
+#-------------------------------------------------------------------------------
+# Number of samples
+END=$(sed '1d' $MASTER | wc -l) # skip hearder line
+
+if [ "$RLEN" -ge 200 ]; then
+    STAR=STARlong
+elif [ "$RLEN" -le 200 ]; then
+    STAR=STAR
+fi
+
+#------------------------------------------------------------------------------
+
+# echo all input variables
+echo ''
+echo '++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++'
+echo 'Input arguments:'
+echo '-----------------------'
+echo 'Location of .fastq files:'
+echo $FADIR
+echo 'Genome .fasta:'
+echo $GENFA
+echo '.gtf file'
+echo $GTF
+echo 'STAR command:'
+echo $STAR
+echo '-----------------------'
+
+echo 'Number of samples= ' $END
+echo 'FIRST sample:' $(awk ' NR=='2' {OFS="\t"; print; }' $MASTER)
+echo 'LAST sample:' $(awk ' NR=='$END+1' {OFS="\t"; print; }' $MASTER)
+if [ "$CPFOLDER" != "no" ]; then
+    echo '-----------------------'
+    echo 'Copy to common foder:'
+    echo $COMMON/$CPFOLDER
+fi
+echo ''
+echo '++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++'
+
 
 # ==============================================================================
 # 1) Junctions
@@ -129,19 +184,26 @@ date
 SAMPLE=\$(awk ' NR=='\$SLURM_ARRAY_TASK_ID+1' { print \$1 ; }' $MASTER)
 FILEBASE=\$(awk ' NR=='\$SLURM_ARRAY_TASK_ID+1' { print \$2 ; }' $MASTER)
 
-R1A=( \$( ls 'fastq_trim/'\$FILEBASE*_R1_*.fastq.gz ))
-R2A=( \$( ls 'fastq_trim/'\$FILEBASE*_R2_*.fastq.gz ))
+R1A=( \$( ls $FADIR\$FILEBASE*_R1_*.fastq.gz ))
+R2A=( \$( ls $FADIR\$FILEBASE*_R2_*.fastq.gz ))
 
 R1=\$(printf ",%s" "\${R1A[@]}")
 R2=\$(printf ",%s" "\${R2A[@]}")
 R1=\${R1:1}
 R2=\${R2:1}
 
-# In progress:::
-for i in "${R1A[@]}"
+#-------------------------------------------------------------------------------
+# BAM read groups:
+RGa=() # Array to hold the read group string
+for ((i=0; i<\${#R1A[@]}; i++))
 do
-echo $(basename $i .trim.fastq.gz) | sed "s|$FILEBASE||" sed 's/.*_L/L/' | sed 's/_R[1|2]_/_/'
+    printf "%s\t%s\n" \$( printf "ID:L%03d" \$((\$i+1)) ) \$( basename \${R1A[\$i]} .trim.fastq.gz ) >> ReadGroup_summary.txt
+    RGa+=\$(printf "ID:L%03d PL:illumina LB:\$SAMPLE SM:\$SAMPLE , " \$(($i+1)))
 done
+
+RG=\$( printf "%s" "\${RGa[@]}" ) 			
+RG=\$(echo \$RG | sed 's/ ,\$//g' ) 
+#-------------------------------------------------------------------------------
 
 OUT=star_2pass/\$FILEBASE'-2pass-'
 
@@ -157,7 +219,7 @@ $STAR --limitGenomeGenerateRAM 62000000000 \
 --outSAMtype BAM Unsorted \
 --runThreadN 20 \
 --readMatesLengthsIn NotEqual \
---outSAMattrRGline ID:\$FILEBASE PL:illumina LB:\$SAMPLE SM:\$SAMPLE
+--outSAMattrRGline \$RG
 
 echo "FILE --> " \$OUT " PROCESSED"
 
@@ -167,27 +229,34 @@ EOF
 # ==============================================================================
 # 4) Add read groups, sort, mark duplicates, and create index
 
-cat > bash/snp_call-Star.sh << EOF
+cat > bash/snp_call-mDupl.sh << EOF
 #!/bin/bash
 #SBATCH --job-name=picard
 #SBATCH -n 2
 #SBATCH --array=1-$END
 #SBATCH --output=slurm/snp_call-picard-%A_%a.out
 
-java -jar picard.jar AddOrReplaceReadGroups 
-I=star_output.sam    # in
-O=rg_added_sorted.bam  # out
-SO=coordinate # EXISTS sort order
-RGID=id       # EXISTS unique sample_id
-RGLB=library  # EXISTS
-RGPL=platform # EXISTS
-RGPU=machine   
-RGSM=sample   # 
+module load samtools picard
+module list
+date
 
-java -jar picard.jar MarkDuplicates I=rg_added_sorted.bam O=dedupped.bam  CREATE_INDEX=true VALIDATION_STRINGENCY=SILENT M=output.metrics 
+#-------------------------------------------------------------------------------
+FILEBASE=\$(awk ' NR=='\$SLURM_ARRAY_TASK_ID+1' { print \$2 ; }' $MASTER)
+BAM=star_2pass/\$FILEBASE'-2pass-Aligned.out.bam'
+BAMC=star_2pass/\$FILEBASE'-2pass-Aligned.out.sortedByCoord.bam'
+PIC=star_2pass/\$FILEBASE'-2pass-Aligned.out.sortedByCoord.dedupped.bam'
+PIM=star_2pass/\$FILEBASE'.dedupped.metrics'
+#-------------------------------------------------------------------------------
 
+samtools sort -n -o \$BAMC -T \$BAM'.temp' -O bam \$BAM
+rm \$BAM
+
+picard MarkDuplicates I=\$BAMC O=\$PIC CREATE_INDEX=true VALIDATION_STRINGENCY=SILENT M=\$PIM 
+rm \$BAMC
 
 EOF
+
+# ==============================================================================
 
 
 # Unfinished stuff from TIM
