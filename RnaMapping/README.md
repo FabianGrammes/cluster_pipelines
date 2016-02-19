@@ -217,9 +217,73 @@ The following information should be contained in the description file:
 3. Date, contact person
 4. 2-3 Sentences about goal/setup of the experiment
 
-# Changelog
+# SNP_call.sh
 
-## Version 1.0.1
+Bash script that automates the steps needed for variant calling of
+RNAseq data. The pipeline was implemented based on the guide from the
+[broad institute](https://www.broadinstitute.org/gatk/guide/article?id=3891). 
+The script is intended to run after the `RNA_map.sh` pipeline has been
+run successfully.
+
+## Example
+
+It's usually a *good idea* to first run the script with the option:
+`--execute no`; Check that the *number of samples* as well as the ID of the first
+and last sample are correct; and than run the whole stuff. 
+
+```bash
+# call to the script
+bscr=/mnt/users/fabig/cluster_pipelines/RnaMapping/SNP_call.sh
+gff=<PATH TO .gff/.gtf>
+fasta=<PATH TO genome  index>
+fqdir=<PATH TO dir holding the trimmed .fasq.gz files>
+
+bash $bscr --GenDir test --GenFa $fasta \
+     --gtf $gff \
+     --FaDir $fadir \
+     -m <Your MASTER.txt> \
+     --read 350 --execute no 
+```
+
+
+## SNP_call options
+
+- `-m|--mastersheet`: *Required*  needs to point to a _master sheet_
+  file (see [ _master sheet_ format guide])
+
+- `--GenFa`: *Required* Full path to the genome, in addition to the
+  `.fa` file there has to be a picard dictionary `.dict` as well as a
+  fasta index `.fai` in the same path. 
+
+- `--GenDir`: *Required* Name of the directory for the updated STAR
+  genome index used for the 2nd round STAR mapping. If an index does
+  already exists the script will start with mapping straight away
+  (variables `--sj` and `--gtf` are NOT needed). If none exists the script will make
+  an index. 
+
+- `--FaDir`: *Required* Full path of the directory that holds the .fasq.gz
+
+- `--read`:  *Required*  Read length 
+
+- `--gtf`:  *Optional* A `.gtf` file is required to build the STAR index
+
+- `--sj`: *Optional* Path to one or several directories containing the
+  `SJ.out.tab` files (produced by the 1st round of STAR mapping). If
+  several directories are specified use a `,` comma to seperate the
+  path names. 
+
+- `--execute`: If set to `<no>` all folders/scripts will be genearted,
+  but none of the jobs will be executed. 
+
+
+
+---
+
+# Changelog
+---
+## RNA_map.sh
+
+### Version 1.0.1
 
 - Accepts multiple .fastq files per Sample as input. Several .fastq
   files will be summarised into one .bam file. All .fastq files need
@@ -231,8 +295,11 @@ The following information should be contained in the description file:
 - *FASTQ*
 	- Added R script to summarise the FastQC reports. Both .pdf and .txt
   
-## Version 1.0
+### Version 1.0
 
 - Simplified the design of the master_sheet
 - Modified the cutadapt script to work with all kinds of Illumina
   adators (single/dual adaptors). 
+---
+
+## SNP_call.sh
