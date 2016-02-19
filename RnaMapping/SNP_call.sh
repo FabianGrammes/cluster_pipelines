@@ -38,7 +38,7 @@ case $key in
 	shift # past argument
 	;;
     -m|--mastersheet) # file name of the mastersheet
-	MASTER="$2"TF
+	MASTER="$2"
 	shift # past argument
 	;;
     --execute)        # Only used for testing; use --execute no
@@ -124,12 +124,6 @@ echo '-----------------------'
 echo 'Number of samples= ' $END
 echo 'FIRST sample:' $(awk ' NR=='2' {OFS="\t"; print; }' $MASTER)
 echo 'LAST sample:' $(awk ' NR=='$END+1' {OFS="\t"; print; }' $MASTER)
-if [ "$CPFOLDER" != "no" ]; then
-    echo '-----------------------'
-    echo 'Copy to common foder:'
-    echo $COMMON/$CPFOLDER
-fi
-echo ''
 echo '++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++'
 
 
@@ -384,7 +378,7 @@ EOF
 
 if [ "$EXECUTE" != "no" ] 
 then
-    if[ ! -d "$GENDIR"  ] # if no STAR index exists make one
+    if [ ! -d "$GENDIR" ] # if no STAR index exists make one
     then
 	#-------------------------------------------------------------------------------
 	# 1) splice junctions
