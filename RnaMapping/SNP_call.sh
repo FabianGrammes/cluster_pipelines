@@ -3,7 +3,7 @@
 
 echo ''
 echo $(date)
-echo 'SNP_call.sh Version 1.0.0'
+echo 'SNP_call.sh Version 1.0.1'
 
 #-------------------------------------------------------------------------------
 # Read script arguments and check if files/dirs exist
@@ -23,6 +23,10 @@ case $key in
 	;;
     --GenDir)      # OPTIONAL: path to the newgenome
 	GENDIR="$2"
+	shift # past argument
+	;;
+    --FaDir)      # .fastq path
+	FADIR="$2"
 	shift # past argument
 	;;
     --read)      # Read length
@@ -45,8 +49,83 @@ esac
 shift # past argument or value
 done
 
+#-------------------------------------------------------------------------------
+# CHECK IF THE MAIN VARIABLES HAVE BEEN SET
+
+
+# check if .fasta file exists
+if [ ! -f "$GENFA" ]; then
+    echo 'ERROR: File' $GENFA 'Does not exist!'
+    exit 1
+else 
+    echo 'FOUND: File' $GENFA
+fi
+
+# check if .gtf file exists
+if [ ! -f "$GTF" ]; then
+    echo 'ERROR: File' $GTF 'Does not exist!'
+    exit 1
+else 
+    echo 'FOUND: File' $GTF 
+fi
+
+# check if MASTER file exists
+if [ ! -f "$MASTER" ]; then
+    echo 'ERROR: File' $MASTER 'Does not exist!'
+    exit 1
+else 
+    echo 'FOUND: File' $MASTER 
+fi
+
+#-------------------------------------------------------------------------------
+
 # Create the folder tree if it does not exist
-mkdir -p {slurm,bash,star_2pass,star_genome,mapp_summary}
+mkdir -p {slurm,bash,star_2pass,star_genome,mapp_summary,gatk}
+
+#-------------------------------------------------------------------------------
+# Check line terminators in MASTER
+if cat -v $MASTER | grep -q '\^M' 
+then
+    echo 'Converting line terminators'
+    sed 's/\r/\n/g' $MASTER > sheet.tmp
+    mv sheet.tmp $MASTER
+else
+    echo 'Line terminators seem correct'
+fi
+
+# Determine which STAR command to use (e.g STAR/STARlong)
+if [ $RLEN -ge 300 ]; then
+    STAR="STARlong"
+else
+    STAR="STAR"
+fi
+
+#-------------------------------------------------------------------------------
+# Number of samples
+END=$(sed '1d' $MASTER | wc -l) # skip hearder line
+
+#------------------------------------------------------------------------------
+
+# echo all input variables
+echo ''
+echo '++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++'
+echo 'Input arguments:'
+echo '-----------------------'
+echo 'Location of .fastq files:'
+echo $FADIR
+echo 'Genome .fasta:'
+echo $GENFA
+echo '.gtf file'
+echo $GTF
+echo 'STAR command:'
+echo $STAR
+echo '-----------------------'
+
+echo 'Number of samples= ' $END
+echo 'FIRST sample:' $(awk ' NR=='2' {OFS="\t"; print; }' $MASTER)
+echo 'LAST sample:' $(awk ' NR=='$END+1' {OFS="\t"; print; }' $MASTER)
+echo '++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++'
+
 
 # ==============================================================================
 # 1) Junctions
@@ -94,7 +173,7 @@ date
 
 mkdir -p $GENDIR
 
-STAR --runMode genomeGenerate \
+$STAR --runMode genomeGenerate \
 --runThreadN 10 \
 --limitGenomeGenerateRAM 62000000000 \
 --genomeChrBinNbits 12 \
@@ -129,19 +208,26 @@ date
 SAMPLE=\$(awk ' NR=='\$SLURM_ARRAY_TASK_ID+1' { print \$1 ; }' $MASTER)
 FILEBASE=\$(awk ' NR=='\$SLURM_ARRAY_TASK_ID+1' { print \$2 ; }' $MASTER)
 
-R1A=( \$( ls 'fastq_trim/'\$FILEBASE*_R1_*.fastq.gz ))
-R2A=( \$( ls 'fastq_trim/'\$FILEBASE*_R2_*.fastq.gz ))
+R1A=( \$( ls $FADIR\$FILEBASE*_R1_*.fastq.gz ))
+R2A=( \$( ls $FADIR\$FILEBASE*_R2_*.fastq.gz ))
 
 R1=\$(printf ",%s" "\${R1A[@]}")
 R2=\$(printf ",%s" "\${R2A[@]}")
 R1=\${R1:1}
 R2=\${R2:1}
 
-# In progress:::
-for i in "${R1A[@]}"
+#-------------------------------------------------------------------------------
+# BAM read groups:
+RGa=() # Array to hold the read group string
+for ((i=0; i<\${#R1A[@]}; i++))
 do
-echo $(basename $i .trim.fastq.gz) | sed "s|$FILEBASE||" sed 's/.*_L/L/' | sed 's/_R[1|2]_/_/'
+    printf "%s\t%s\n" \$( printf "ID:L%03d" \$((\$i+1)) ) \$( basename \${R1A[\$i]} .trim.fastq.gz ) >> ReadGroup_summary.txt
+    RGa+=\$(printf "ID:L%03d PL:illumina LB:\$SAMPLE SM:\$SAMPLE , " \$(($i+1)))
 done
+
+RG=\$( printf "%s" "\${RGa[@]}" ) 			
+RG=\$(echo \$RG | sed 's/ ,\$//g' ) 
+#-------------------------------------------------------------------------------
 
 OUT=star_2pass/\$FILEBASE'-2pass-'
 
@@ -157,9 +243,27 @@ $STAR --limitGenomeGenerateRAM 62000000000 \
 --outSAMtype BAM Unsorted \
 --runThreadN 20 \
 --readMatesLengthsIn NotEqual \
---outSAMattrRGline ID:\$FILEBASE PL:illumina LB:\$SAMPLE SM:\$SAMPLE
+--outSAMattrRGline \$RG
 
 echo "FILE --> " \$OUT " PROCESSED"
+
+EOF
+
+
+
+cat > bash/snp_call-StarCheck.sh << EOF
+#!/bin/bash
+#SBATCH --job-name=STARstat
+#SBATCH -n 1
+#SBATCH --output=slurm/snp_call-StarStats%j.out
+
+module load R
+module list
+date
+
+cd star_2pass
+R CMD BATCH /mnt/users/fabig/cluster_pipelines/RnaMapping/helper_scripts/STAR_Log.R
+cd ..
 
 EOF
 
@@ -167,95 +271,186 @@ EOF
 # ==============================================================================
 # 4) Add read groups, sort, mark duplicates, and create index
 
-cat > bash/snp_call-Star.sh << EOF
+cat > bash/snp_call-mDupl.sh << EOF
 #!/bin/bash
 #SBATCH --job-name=picard
-#SBATCH -n 2
+#SBATCH -n 1
 #SBATCH --array=1-$END
 #SBATCH --output=slurm/snp_call-picard-%A_%a.out
 
-java -jar picard.jar AddOrReplaceReadGroups 
-I=star_output.sam    # in
-O=rg_added_sorted.bam  # out
-SO=coordinate # EXISTS sort order
-RGID=id       # EXISTS unique sample_id
-RGLB=library  # EXISTS
-RGPL=platform # EXISTS
-RGPU=machine   
-RGSM=sample   # 
+module load samtools picard
+module list
+date
 
-java -jar picard.jar MarkDuplicates I=rg_added_sorted.bam O=dedupped.bam  CREATE_INDEX=true VALIDATION_STRINGENCY=SILENT M=output.metrics 
+#-------------------------------------------------------------------------------
+FILEBASE=\$(awk ' NR=='\$SLURM_ARRAY_TASK_ID+1' { print \$2 ; }' $MASTER)
+BAM=star_2pass/\$FILEBASE'-2pass-Aligned.out.bam'
+BAMC=star_2pass/\$FILEBASE'-2pass-Aligned.out.sortedByCoord.bam'
+PIC=star_2pass/\$FILEBASE'-2pass-Aligned.out.sortedByCoord.dedupped.bam'
+PIM=star_2pass/\$FILEBASE'.dedupped.metrics'
+#-------------------------------------------------------------------------------
 
+samtools sort -o \$BAMC -T \$BAM'.temp' -O bam \$BAM
+rm \$BAM
 
+picard MarkDuplicates I=\$BAMC O=\$PIC CREATE_INDEX=true VALIDATION_STRINGENCY=SILENT M=\$PIM 
+rm \$BAMC
+EOF
+
+# ==============================================================================
+# 5) Split'N'Trim and reassign mapping qualities
+
+cat > bash/snp_call-splitNtrim.sh << EOF
+#!/bin/bash
+#SBATCH --job-name=splitNtrim
+#SBATCH -n 1
+#SBATCH --array=1-$END
+#SBATCH --output=slurm/snp_call-splitNtrim-%A_%a.out
+
+module load gatk/3.5
+module list 
+date
+
+FILEBASE=\$(awk ' NR=='\$SLURM_ARRAY_TASK_ID+1' { print \$2 ; }' $MASTER)
+BAM_in=star_2pass/\$FILEBASE'-2pass-Aligned.out.sortedByCoord.dedupped.bam'
+BAM_cig=gatk/\$FILEBASE'-2pass-Aligned.out.sortedByCoord.dedupped.splitCig.bam'
+
+gatk SplitNCigarReads -R $GENFA \
+-I \$BAM_in \
+-o \$BAM_cig \
+-rf ReassignOneMappingQuality -RMQF 255 -RMQT 60 \
+-U ALLOW_N_CIGAR_READS
+
+rm \$BAM_in
 EOF
 
 
-# Unfinished stuff from TIM
-cat > bash/snp_call-TIM.sh << EOF
-#SBATCH -N 1
-#SBATCH -n 5
+
+cat > bash/snp_call-Variant.sh << EOF
+#!/bin/bash
+#SBATCH --job-name=variant
+#SBATCH -n 10
+#SBATCH --array=1-$END%10
+#SBATCH --output=slurm/snp_call-variant-%A_%a.out
+
 module load gatk/3.5
-set -o nounset   # Prevent unset variables from been used.
+module list
+date
+
+# set -o nounset   # Prevent unset variables from been used.
 set -o errexit   # Exit if error occurs
 
 ## RNA-seq variant calling as described in GATK best practises https://www.broadinstitute.org/gatk/guide/article?id=3891
 ## Best practies scripted below where Last updated on 2015-12-07 11:08:30 in link above
-
 ## Usage test case: sbatch SNP_call.sh ref BAM_in
 
 ## Set variables
-threads=5 
-BAM_input=$2
-VCF_temp=${RANDOM}.vcf
-reference=$1
-VCF_out=test/$(basename $BAM_input .bam).vcf
+FILEBASE=\$(awk ' NR=='\$SLURM_ARRAY_TASK_ID+1' { print \$2 ; }' $MASTER)
+BAM_cig=gatk/\$FILEBASE'-2pass-Aligned.out.sortedByCoord.dedupped.splitCig.bam'
+VCF_out=gatk/\$(basename \$BAM_cig .bam).vcf
+VCF_temp=\$VCF_out'.tmp'
 
-## Test variables
-#BAM_input=test.bam
-#VCF_temp=${RANDOM}.vcf
-#reference=test.fasta
-#VCF_out=$(basename $BAM_input .bam).vcf
+threads=10
 
 
 ## Do the variant calling on 2-pass recalibrated BAM.
 ## -recoverDanglingHeads is default in gatk 3.5, but was not in previos versions. Use 3.5! 
 
-echo "Running commnds:"
-echo
-echo gatk -T HaplotypeCaller \
-	-R $reference \
-	-I $BAM_input \
-	-dontUseSoftClippedBases \
-	-stand_call_conf 20.0 \
-	-stand_emit_conf 20.0 \
-	--num_cpu_threads_per_data_thread $threads \
-	-o $VCF_temp
-
-## Do RNA-seq specific filtering
-echo gatk -T VariantFiltration \
-	-R $reference \
-	-V $VCF_temp \
-	-window 35 -cluster 3 \
-	-filterName FS -filter "FS > 30.0" \
-	-filterName QD -filter "QD < 2.0" \
-	-o $VCF_out
+echo "==> HaplotypeCaller"
 
 gatk -T HaplotypeCaller \
-	-R $reference \
-	-I $BAM_input \
-	-dontUseSoftClippedBases \
-	-stand_call_conf 20.0 \
-	-stand_emit_conf 20.0 \
-	--num_cpu_threads_per_data_thread $threads \
-	-o $VCF_temp
+-R $GENFA -I \$BAM_cig \
+-dontUseSoftClippedBases \
+-stand_call_conf 20.0 \
+-stand_emit_conf 20.0 \
+--num_cpu_threads_per_data_thread \$threads \
+-o \$VCF_temp
 
 ## Do RNA-seq specific filtering
-gatk -T VariantFiltration \
-	-R $reference \
-	-V $VCF_temp \
-	-window 35 -cluster 3 \
-	-filterName FS -filter "FS > 30.0" \
-	-filterName QD -filter "QD < 2.0" \
-	-o $VCF_out
+echo "==> VariantFiltration"
+gatk -T VariantFiltration -R $GENFA -V \$VCF_temp \
+-window 35 -cluster 3 \
+-filterName FS -filter "FS>30.0" \
+-filterName QD -filter "QD<2.0" \
+-o \$VCF_out
 
+echo "==> Finished"
 EOF
+# ==============================================================================
+
+# SCRIPT SUBMISSION
+
+if [ "$EXECUTE" != "no" ] 
+then
+    if [ ! -d "$GENDIR" ] # if no STAR index exists make one
+    then
+	#-------------------------------------------------------------------------------
+	# 1) splice junctions
+	command='sbatch bash/snp_call-SJ.sh'
+	SJjob=$($command | awk ' { print $4 }')
+	echo '---------------'
+	echo ' Splice junctions'
+	echo ' slurm ID:' $TrimJobArray
+	
+	#-------------------------------------------------------------------------------
+	# 2) STAR index
+	command="sbatch --dependency=afterok:$SJjob bash/snp_call-StarIdx.sh"
+	IDXjob=$($command | awk ' { print $4 }')
+	echo '---------------'
+	echo ' Making STARindex'
+	echo ' slurm ID' $IDXjob
+	
+	#-------------------------------------------------------------------------------
+	# 3) 2nd Round STAR
+	command="sbatch --dependency=afterok:$IDXjob bash/snp_call-Star.sh"
+	STARjob=$($command | awk ' { print $4 }')
+	echo '---------------'
+	echo ' 2nd round mapping'
+	echo ' slurm ID' $STARjob
+    else
+	#-------------------------------------------------------------------------------
+	# 1) 2nd Round STAR
+	command="sbatch bash/snp_call-Star.sh"
+	STARjob=$($command | awk ' { print $4 }')
+	echo '---------------'
+	echo ' 2nd round mapping'
+	echo ' slurm ID' $STARjob
+    fi
+
+    #-------------------------------------------------------------------------------
+    command="sbatch --dependency=afterok:$STARjob bash/snp_call-StarCheck.sh"
+    CHECKjob=$($command | awk ' { print $4 }')
+    echo '---------------'
+    echo ' star check processing'
+    echo ' slurm ID' $CHECKjob
+
+    #-------------------------------------------------------------------------------
+    # 1) Picard
+    command="sbatch --dependency=afterok:$STARjob bash/snp_call-mDupl.sh"
+    PICjob=$($command | awk ' { print $4 }')
+    echo '---------------'
+    echo ' picard processing'
+    echo ' slurm ID' $PICjob
+    
+    
+    #-------------------------------------------------------------------------------
+    command="sbatch --dependency=afterok:$PICjob bash/snp_call-splitNtrim.sh"
+    SPLITjob=$($command | awk ' { print $4 }')
+    echo '---------------'
+    echo ' splitNtrim processing'
+    echo ' slurm ID' $SPLITjob
+
+        #-------------------------------------------------------------------------------
+    command="sbatch --dependency=afterok:$SPLITjob bash/snp_call-Variant.sh"
+    VARjob=$($command | awk ' { print $4 }')
+    echo '---------------'
+    echo ' Variant calling+filtering'
+    echo ' slurm ID' $VARjob
+
+    
+
+else
+    echo '=================='
+    echo 'Nothing submitted!'
+    echo '=================='
+fi
