@@ -290,7 +290,7 @@ PIC=star_2pass/\$FILEBASE'-2pass-Aligned.out.sortedByCoord.dedupped.bam'
 PIM=star_2pass/\$FILEBASE'.dedupped.metrics'
 #-------------------------------------------------------------------------------
 
-samtools sort -n -o \$BAMC -T \$BAM'.temp' -O bam \$BAM
+samtools sort -o \$BAMC -T \$BAM'.temp' -O bam \$BAM
 rm \$BAM
 
 picard MarkDuplicates I=\$BAMC O=\$PIC CREATE_INDEX=true VALIDATION_STRINGENCY=SILENT M=\$PIM 
@@ -307,6 +307,10 @@ cat > bash/snp_call-splitNtrim.sh << EOF
 #SBATCH --array=1-$END
 #SBATCH --output=slurm/snp_call-splitNtrim-%A_%a.out
 
+module load gatk/3.5
+module list 
+date
+
 FILEBASE=\$(awk ' NR=='\$SLURM_ARRAY_TASK_ID+1' { print \$2 ; }' $MASTER)
 BAM_in=star_2pass/\$FILEBASE'-2pass-Aligned.out.sortedByCoord.dedupped.bam'
 BAM_cig=gatk/\$FILEBASE'-2pass-Aligned.out.sortedByCoord.dedupped.splitCig.bam'
@@ -317,7 +321,7 @@ gatk SplitNCigarReads -R $GENFA \
 -rf ReassignOneMappingQuality -RMQF 255 -RMQT 60 \
 -U ALLOW_N_CIGAR_READS
 
-rm $BAM_in
+rm \$BAM_in
 EOF
 
 
@@ -366,8 +370,8 @@ gatk -T HaplotypeCaller \
 echo "==> VariantFiltration"
 gatk -T VariantFiltration -R $GENFA -V \$VCF_temp \
 -window 35 -cluster 3 \
--filterName FS -filter "FS > 30.0" \
--filterName QD -filter "QD < 2.0" \
+-filterName FS -filter "FS>30.0" \
+-filterName QD -filter "QD<2.0" \
 -o \$VCF_out
 
 echo "==> Finished"
@@ -414,7 +418,7 @@ then
     fi
 
     #-------------------------------------------------------------------------------
-    command="sbatch --dependency=afterok:$STARjob snp_call-StarCheck.sh"
+    command="sbatch --dependency=afterok:$STARjob bash/snp_call-StarCheck.sh"
     CHECKjob=$($command | awk ' { print $4 }')
     echo '---------------'
     echo ' star check processing'
