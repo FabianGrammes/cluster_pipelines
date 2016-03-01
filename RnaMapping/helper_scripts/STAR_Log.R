@@ -1,5 +1,5 @@
 library(ggplot2)
-library(reshape)
+library(reshape2)
 library(gtable)
 
 ######################################################################
@@ -64,10 +64,10 @@ plot.gg2 <- function(x, main){
 
 # main plotting function
 plot.all <- function(x){
-    d1 = melt(x[2:3,])
-    d2 = melt(x[c(6:8,14,15),])
-    d3 = melt(x[c(21,23),])
-    d4 = melt(x[c(26,27),])
+    d1 = reshape2::melt(x[2:3,])
+    d2 = reshape2::melt(x[c(6:8,14,15),])
+    d3 = reshape2::melt(x[c(21,23),])
+    d4 = reshape2::melt(x[c(26,27),])
     # get gtables
     gt1 = ggplot_gtable(ggplot_build(plot.gg2(d1, main="Input reads")))
     gt2 = ggplot_gtable(ggplot_build(plot.gg1(d2, main="Uniquely mapped reads")))
