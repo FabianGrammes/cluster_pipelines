@@ -248,6 +248,11 @@ bash $bscr --GenDir test --GenFa $fasta \
 
 ## SNP_call options
 
+- `--RunType`: *Required* ,<makeIdx/mapp>.  <makeIdx> Generates a STAR
+  genome index using a list of (specified) splice junctions for 2nd
+  round STAR mapping. <mapp> the script will conduct 2nd round STAR
+  mapping.
+  
 - `-m|--mastersheet`: *Required*  needs to point to a _master sheet_
   file (see [ _master sheet_ format guide])
 
