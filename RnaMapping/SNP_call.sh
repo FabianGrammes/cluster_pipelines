@@ -249,10 +249,10 @@ else
 cat > bash/snp_call-Star.sh << EOF
 #!/bin/bash
 #SBATCH --job-name=STAR2nd
-#SBATCH -n 20
-#SBATCH -N 1
+#SBATCH -n 15
+#SBATCH --nodes=1
 #SBATCH --mem=60G
-#SBATCH --array=1-$END%5
+#SBATCH --array=1-$END%8
 #SBATCH --output=slurm/snp_call-Star-%A_%a.out
     
 module load star
@@ -276,7 +276,7 @@ RGa=() # Array to hold the read group string
 for ((i=0; i<\${#R1A[@]}; i++))
 do
     printf "%s\t%s\n" \$( printf "ID:L%03d" \$((\$i+1)) ) \$( basename \${R1A[\$i]} .trim.fastq.gz ) >> ReadGroup_summary.txt
-    RGa+=\$(printf "ID:L%03d PL:illumina LB:\$SAMPLE SM:\$SAMPLE , " \$(($i+1)))
+    RGa+=\$(printf "ID:L%03d PL:illumina LB:\$SAMPLE SM:\$SAMPLE , " \$((\$i+1)))
 done
 
 RG=\$( printf "%s" "\${RGa[@]}" ) 			
@@ -329,6 +329,7 @@ cat > bash/snp_call-mDupl.sh << EOF
 #!/bin/bash
 #SBATCH --job-name=picard
 #SBATCH -n 5
+#SBATCH --nodes=1
 #SBATCH --mem=10G
 #SBATCH --array=1-$END%20
 #SBATCH --output=slurm/snp_call-picard-%A_%a.out

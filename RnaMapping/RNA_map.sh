@@ -345,6 +345,19 @@ R2=\$(printf ",%s" "\${R2A[@]}")
 R1=\${R1:1}
 R2=\${R2:1}
 
+#-------------------------------------------------------------------------------
+# BAM read groups:
+RGa=() # Array to hold the read group string
+for ((i=0; i<\${#R1A[@]}; i++))
+do
+    printf "%s\t%s\n" \$( printf "ID:L%03d" \$((\$i+1)) ) \$( basename \${R1A[\$i]} .trim.fastq.gz ) >> ReadGroup_summary.txt
+    RGa+=\$(printf "ID:L%03d PL:illumina LB:\$SAMPLE SM:\$SAMPLE , " \$(($i+1)))
+done
+
+RG=\$( printf "%s" "\${RGa[@]}" ) 			
+RG=\$(echo \$RG | sed 's/ ,\$//g' ) 
+#-------------------------------------------------------------------------------
+
 OUT=star/\$FILEBASE
 
 echo "Running  --> " \$R1 \$R2
@@ -357,6 +370,7 @@ $STAR --limitGenomeGenerateRAM 62000000000 \
 --outFileNamePrefix \$OUT \
 --outSAMmode Full \
 --outSAMtype BAM Unsorted \
+--outSAMstrandField intronMotif \
 --runThreadN 20 \
 --readMatesLengthsIn NotEqual \
 --outSAMattrRGline ID:\$FILEBASE PL:illumina LB:\$SAMPLE SM:\$SAMPLE
@@ -372,7 +386,7 @@ EOF\
 cat > bash/sbatch-htseq.sh << EOF
 #!/bin/sh
 #SBATCH -n 1     
-#SBATCH --array=1-$END       
+#SBATCH --array=1-$END%20
 #SBATCH --job-name=HTseq  
 #SBATCH --output=slurm/HTSeq-%A_%a.out
 
