@@ -106,6 +106,9 @@ then
     ANNOTATTRIBUTE=gene_id
 fi
 
+# Path to the R scripts
+SCRIPTPATH=$(readlink -f "$0") # finds the path where the script resides
+HELPPATH=$(dirname "$SCRIPTPATH")/helper_scripts
 
 #-------------------------------------------------------------------------------
 # Checks for common folder copy
@@ -422,7 +425,7 @@ module list
 date
 
 cd star
-R CMD BATCH /mnt/users/fabig/cluster_pipelines/RnaMapping/helper_scripts/STAR_Log.R
+R CMD BATCH $HELPPATH/STAR_Log.R
 cd ..
 
 EOF
@@ -441,14 +444,14 @@ module list
 date
 
 cd count
-R CMD BATCH /mnt/users/fabig/cluster_pipelines/RnaMapping/helper_scripts/HTseq_plot.R
+R CMD BATCH $HELPPATH/HTseq_plot.R
 cd ..
 
 # collect FastQC reports for trimmed reads
-Rscript /mnt/users/fabig/cluster_pipelines/RnaMapping/helper_scripts/collect_fastqc.R qc_trim mapp_summary/fastqc_trimmed
+Rscript $HELPPATH/collect_fastqc.R qc_trim mapp_summary/fastqc_trimmed
 
 # collect FastQC reports for raw reads
-Rscript /mnt/users/fabig/cluster_pipelines/RnaMapping/helper_scripts/collect_fastqc.R qc mapp_summary/fastqc
+Rscript $HELPPATH/collect_fastqc.R qc mapp_summary/fastqc
 EOF
 
 #-------------------------------------------------------------------------------
