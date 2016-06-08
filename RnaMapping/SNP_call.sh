@@ -45,6 +45,10 @@ case $key in
 	EXECUTE="$2"
 	shift # past argument
 	;;
+    --RawDir)
+	DIRIN="$2"
+	shift # past argument
+	;;      
     --RunType)
         RTYP="$2"  # Accepts makeIdx/mapp
 	shift
@@ -54,9 +58,9 @@ shift # past argument or value
 done
 
 
-if [ "$RTYP" != "makeIdx" ] && [ "$RTYP" != "mapp" ]
+if [ "$RTYP" != "makeIdx" ] && [ "$RTYP" != "mapp" ] && [ "$RTYP" != "ReRun" ] 
 then
-    echo "ERROR --RunType has to be set to makeIdx/mapp"
+    echo "ERROR --RunType has to be set to makeIdx/mapp or ReRun"
     exit 1
 fi
 	
@@ -65,7 +69,7 @@ fi
     
 # check if .fasta file exists
 if [ ! -f "$GENFA" ]; then
-    echo 'ERROR: File' $GENFA 'Does not exist!'
+    echo 'ERROR1: File' $GENFA 'Does not exist!'
     exit 1
 else 
     echo 'FOUND: File' $GENFA
@@ -73,7 +77,7 @@ fi
 
 # check if .gtf file exists
 if [ ! -f "$GTF" ]; then
-    echo 'ERROR: File' $GTF 'Does not exist!'
+    echo 'ERROR2: File' $GTF 'Does not exist!'
     exit 1
 else 
     echo 'FOUND: File' $GTF 
@@ -86,7 +90,7 @@ if [ "$RTYP" == "makeIdx" ]
 then
     # check if Read length is set
     if [ -z "$RLEN" ]; then
-	echo 'ERROR: You have to specify read length at --read'
+	echo 'ERROR3: You have to specify read length at --read'
 	exit 1
     fi
     
@@ -110,7 +114,7 @@ else
     # check if MASTER file exists
     if [ ! -f "$MASTER" ]
     then
-	echo 'ERROR: File' $MASTER 'Does not exist!'
+	echo 'ERROR4: File' $MASTER 'Does not exist!'
 	exit 1
     else 
 	echo 'FOUND: File' $MASTER 
@@ -131,7 +135,7 @@ else
     fi
 
     # Determine which STAR command to use (e.g STAR/STARlong)
-    if [ $RLEN -ge 300 ]
+    if [ "$RLEN" == "300" ]
     then
 	STAR="STARlong"
     else
@@ -239,8 +243,47 @@ echo '==>>FINISHED'
 
 EOF
 
-else 
+fi
 
+if [ "$RTYP" == "ReRun"  ]  ## Only use the commands to make the STAR index
+then
+    
+cat > bash/snp_call-trim.sh << EOF
+#!/bin/sh
+#SBATCH --ntasks=1
+#SBATCH --array=1-$END
+#SBATCH --job-name=TRIMMER
+#SBATCH --output=slurm/trim-%A_%a.out
+  
+module load anaconda
+module list
+date
+  
+FILEBASE=\$(awk ' NR=='\$SLURM_ARRAY_TASK_ID+1' { print \$2 ; }' $MASTER)
+
+R1A=( \$( ls $DIRIN'/'\$FILEBASE*_R1_*.fastq.gz ))
+R2A=( \$( ls $DIRIN'/'\$FILEBASE*_R2_*.fastq.gz ))
+
+# Loop in parallel
+count=\${#R1A[@]}
+for i in \`seq 1 \$count\`
+do
+    R1=\${R1A[\$i-1]}
+    O1='fastq_trim/'\$(basename \$R1 | sed 's/.fastq.gz//')'.trim.fastq.gz'
+    R2=\${R2A[\$i-1]}
+    O2='fastq_trim/'\$(basename \$R2 | sed 's/.fastq.gz//')'.trim.fastq.gz'
+    echo "==>>" \$R1 \$R2
+    cutadapt -q 20 -O 8 --minimum-length 40 -a AGATCGGAAGAGC -A AGATCGGAAGAGC -o \$O1 -p \$O2 \$R1 \$R2
+done
+
+EOF
+
+fi
+
+if [ "$RTYP" == "mapp"  ] || [ "$RTYP" == "ReRun" ]
+then
+    
+    
 # eventually kill the old STAR directory after this
 
 # ==============================================================================
@@ -275,7 +318,7 @@ R2=\${R2:1}
 RGa=() # Array to hold the read group string
 for ((i=0; i<\${#R1A[@]}; i++))
 do
-    printf "%s\t%s\n" \$( printf "ID:L%03d" \$((\$i+1)) ) \$( basename \${R1A[\$i]} .trim.fastq.gz ) >> ReadGroup_summary.txt
+    printf "%s\t%s\n" \$( printf "ID:L%03d" \$((\$i+1)) ) \$( basename \${R1A[\$i]} .trim.fastq.gz ) >> ReadGroup_summary_2pass.txt
     RGa+=\$(printf "ID:L%03d PL:illumina LB:\$SAMPLE SM:\$SAMPLE , " \$((\$i+1)))
 done
 
@@ -347,12 +390,12 @@ PIM=star_2pass/\$FILEBASE'.dedupped.metrics'
 #-------------------------------------------------------------------------------
 
 samtools sort -@5 -m 2G -o \$BAMC -T \$BAM'.temp' -O bam \$BAM
-#rm \$BAM
+rm \$BAM
 echo '==> Done sorting'
 
 
 picard MarkDuplicates I=\$BAMC O=\$PIC CREATE_INDEX=true VALIDATION_STRINGENCY=SILENT M=\$PIM 
-#rm \$BAMC
+rm \$BAMC
 echo '==> Done marking duplicates'
 EOF
 
@@ -381,7 +424,7 @@ gatk SplitNCigarReads -R $GENFA \
 -U ALLOW_N_CIGAR_READS
 
 echo '==> Done splitting cigars'
-#rm \$BAM_in
+rm \$BAM_in
 EOF
 
 
@@ -391,7 +434,8 @@ cat > bash/snp_call-Variant.sh << EOF
 #SBATCH --job-name=variant
 #SBATCH -n 10
 #SBATCH --nodes=1
-#SBATCH --array=1-$END%10
+#SBATCH --array=1-$END%20
+#SBATCH --mem=13G
 #SBATCH --output=slurm/snp_call-variant-%A_%a.out
 
 module load gatk/3.5
@@ -464,10 +508,27 @@ then
 	echo '---------------'
 	echo ' Making STARindex'
 	echo ' slurm ID' $IDXjob
-    else
+    fi
+    if [ "$RTYP" == "ReRun" ]
+    then
+	mkdir -p fastq_trim
+	command="sbatch bash/snp_call-trim.sh"
+	TRjob=$($command | awk ' { print $4 }')
+	echo '---------------'
+	echo ' Trimming'
+	echo ' slurm ID:' $SJjob
+    fi
+    if [ "$RTYP" == "mapp"  ] || [ "$RTYP" == "ReRun" ]
+    then
 	#-------------------------------------------------------------------------------
 	# 1) 2nd Round STAR
-	command="sbatch bash/snp_call-Star.sh"
+	if [ -z "$TRjob" ] # if no Trim job exists
+	then
+	    command="sbatch bash/snp_call-Star.sh"
+	else
+	    command="sbatch --dependency=afterok:$TRjob bash/sbatch-star.sh"
+	fi
+	    
 	STARjob=$($command | awk ' { print $4 }')
 	echo '---------------'
 	echo ' 2nd round mapping'
