@@ -1,5 +1,5 @@
 library(ggplot2)
-library(reshape)
+library(reshape2)
 
 # SCRIPT to collect the counting statistics from HTSeq
 
@@ -49,7 +49,7 @@ plot.gg2 <- function(x, main){
 
 data <- HTSeq.logs()
 write.table(data, file = "../mapp_summary/HTSeq_Count_Stats.txt", sep="\t", col.names=T, row.names=T, quote=F)
-datM <- melt(data)
+datM <- reshape2::melt(data)
 datM$X1 <- factor(datM$X1, levels = c("feature_found", "no_feature", "ambiguous",
                                "alignment_not_unique", "too_low_aQual", "not_aligned"))
 pdf("../mapp_summary/HTSeq_Count_Stats.pdf", height=6, width=11)

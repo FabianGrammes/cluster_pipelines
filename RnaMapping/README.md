@@ -60,7 +60,7 @@ In order for the `R` scripts to work you need to have the following
 packages installed in your `orion R`
 
 - `ggplot2`
-- `reshape`
+- `reshape2`
 - `gtable`
 - `plyr`
 - `grid`
